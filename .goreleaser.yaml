@@ -15,16 +15,20 @@ builds:
       - -s -w -X main.version={{.Version}}
 
 archives:
-  - format: tar.gz
+  - formats:
+      - tar.gz
     name_template: "liferay_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
     format_overrides:
       - goos: windows
-        format: zip
+        formats:
+          - zip
 
-brews:
+homebrew:
   - repository:
       owner: david-truong
       name: homebrew-liferay
+      token: "{{ .Env.HOMEBREW_TAP_GITHUB_TOKEN }}"
+    name: liferay
     homepage: https://github.com/david-truong/liferay-portal-cli
     description: CLI for Liferay portal development workflows (build modules, manage worktrees, run containers)
     license: MIT
