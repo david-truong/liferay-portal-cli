@@ -1,0 +1,44 @@
+version: 2
+
+builds:
+  - env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - darwin
+      - windows
+    goarch:
+      - amd64
+      - arm64
+    binary: liferay
+    ldflags:
+      - -s -w -X main.version={{.Version}}
+
+archives:
+  - format: tar.gz
+    name_template: "liferay_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    format_overrides:
+      - goos: windows
+        format: zip
+
+brews:
+  - repository:
+      owner: david-truong
+      name: homebrew-liferay
+    homepage: https://github.com/david-truong/liferay-portal-cli
+    description: CLI for Liferay portal development workflows (build modules, manage worktrees, run containers)
+    license: MIT
+    install: |
+      bin.install "liferay"
+    test: |
+      system "#{bin}/liferay", "--version"
+
+checksum:
+  name_template: "checksums.txt"
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"
