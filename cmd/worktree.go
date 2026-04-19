@@ -54,7 +54,10 @@ var worktreeListCmd = &cobra.Command{
 	},
 }
 
+var worktreeBuild bool
+
 func init() {
+	worktreeAddCmd.Flags().BoolVar(&worktreeBuild, "build", false, "Run 'liferay build' (ant all) after creating the worktree")
 	worktreeCmd.AddCommand(worktreeAddCmd, worktreeRemoveCmd, worktreeListCmd)
 	rootCmd.AddCommand(worktreeCmd)
 }
@@ -84,7 +87,15 @@ func runWorktreeAdd(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 
-	return propagatePortalFiles(primaryRoot, absTarget)
+	if err := propagatePortalFiles(primaryRoot, absTarget); err != nil {
+		return err
+	}
+
+	if worktreeBuild {
+		fmt.Println("\nRunning liferay build (ant all) ...")
+		return runAntAll(absTarget)
+	}
+	return nil
 }
 
 func propagatePortalFiles(primaryRoot, worktreeRoot string) error {

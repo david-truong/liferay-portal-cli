@@ -51,10 +51,16 @@ This runs `git worktree add`, then:
 - Copies `build.*.properties`, `test.*.properties`, `release.*.properties`
 - Generates `app.server.<user>.properties` pointing bundles inside the worktree
 
-After adding, build the bundle:
+Optionally build the bundle immediately:
 
 ```sh
-cd ../LPD-99999 && ant all
+liferay worktree add LPD-99999 ../LPD-99999 --build
+```
+
+Or build later from within the worktree:
+
+```sh
+liferay build
 ```
 
 Other worktree commands:
