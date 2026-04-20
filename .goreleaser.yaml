@@ -23,7 +23,7 @@ archives:
         formats:
           - zip
 
-homebrew:
+brews:
   - repository:
       owner: david-truong
       name: homebrew-liferay
