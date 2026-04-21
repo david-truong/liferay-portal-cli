@@ -8,17 +8,8 @@ import (
 	"runtime"
 )
 
-// Find returns the absolute path to the gradle wrapper command for the given module directory.
-// Prefers `gw` on PATH (the GraalVM helper from homebrew-liferay); falls back to the nearest gradlew / gradlew.bat.
+// Find returns the absolute path to the nearest gradlew / gradlew.bat for the given module directory.
 func Find(moduleDir string) (string, error) {
-	// Prefer gw if available
-	for _, name := range gwNames() {
-		if path, err := exec.LookPath(name); err == nil {
-			return path, nil
-		}
-	}
-
-	// Fall back to nearest gradlew / gradlew.bat
 	wrapperName := "gradlew"
 	if runtime.GOOS == "windows" {
 		wrapperName = "gradlew.bat"
@@ -38,13 +29,10 @@ func Find(moduleDir string) (string, error) {
 	}
 
 	return "", fmt.Errorf(
-		"gradle wrapper not found\n\n" +
-			"Install gw (the Liferay Gradle wrapper helper):\n" +
-			"  brew install david-truong/liferay/gw\n" +
-			"Or ensure gradlew exists in the portal root.")
+		"gradlew not found — ensure gradlew exists in the portal root")
 }
 
-// Command returns an *exec.Cmd ready to run the gradle wrapper from moduleDir with the given args.
+// Command returns an *exec.Cmd ready to run gradlew from moduleDir with the given args.
 func Command(moduleDir string, args ...string) (*exec.Cmd, error) {
 	wrapper, err := Find(moduleDir)
 	if err != nil {
@@ -60,11 +48,4 @@ func Command(moduleDir string, args ...string) (*exec.Cmd, error) {
 	}
 	cmd.Dir = moduleDir
 	return cmd, nil
-}
-
-func gwNames() []string {
-	if runtime.GOOS == "windows" {
-		return []string{"gw.exe", "gw"}
-	}
-	return []string{"gw"}
 }

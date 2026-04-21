@@ -7,9 +7,13 @@ import (
 )
 
 var rootCmd = &cobra.Command{
-	Use:          "liferay",
-	Short:        "CLI for Liferay portal development workflows",
-	Long:         `liferay wraps common liferay-portal / liferay-portal-ee tasks: building modules, managing git worktrees, and running containerized servers.`,
+	Use:   "liferay",
+	Short: "Agent-oriented CLI for Liferay portal workflows",
+	Long: `liferay is built for AI agents, not human developers.
+
+Every command works from a single working directory (the portal root) with no cd,
+no interactive prompts, and no arcane flags. Human developers should keep using
+gw, blade, and their IDE.`,
 	SilenceUsage: true,
 }
 
