@@ -40,7 +40,8 @@ go install github.com/david-truong/liferay-portal-cli@latest
 | `liferay test <module> --tests <filter>` | Run unit tests in a module (`gw test --tests`) |
 | `liferay test-integration <module> --tests <filter>` | Run integration tests in a module (`gw testIntegration --tests`) |
 | `liferay worktree <add\|list\|remove>` | Create and manage git worktrees |
-| `liferay server <up\|down\|logs\|ps\|restart>` | Start Tomcat + MySQL in Docker |
+| `liferay db <up\|down\|logs\|ps\|restart> [--engine mysql\|mariadb\|postgres\|hypersonic]` | Manage the per-worktree database stack |
+| `liferay server <start\|stop\|restart\|run\|status\|logs\|wipe>` | Manage the host-native Tomcat bundle |
 
 ---
 
@@ -155,7 +156,7 @@ liferay test change-tracking-web --tests "com.liferay.foo.FooTest.testBar"
 
 ### `liferay test-integration`
 
-Run integration tests in a module. Requires a running Liferay server for most tests:
+Run integration tests in a module against the host-native Liferay server started by `liferay server start`. On slot 0 (stock ports) this is a pass-through to `gw testIntegration --tests <filter>`. On slot > 0 the CLI writes a Gradle init script that pins `testIntegrationTomcat.portNumber` to the bundle's HTTP port and forwards `-Dliferay.arquillian.port` / `-Dliferay.data.guard.port` to the test JVM so it matches the server-side OSGi-configured ports.
 
 ```sh
 liferay test-integration change-tracking-web --tests "*FooTest"
@@ -188,31 +189,99 @@ liferay worktree list
 liferay worktree remove ../LPD-99999   # also removes .liferay-cli/ and bundles/
 ```
 
-### `liferay server`
+### `liferay db`
 
-Start Tomcat + MySQL in Docker (one stack per worktree, isolated ports and data):
+Per-worktree database container + Adminer in Docker. Tomcat is **not** in the container — it runs natively (see `liferay server`). `db up` allocates a slot, starts the chosen engine, and rewrites the bundle's `portal-ext.properties` so the host-native Tomcat can reach the DB on `localhost:<slot-DB>`.
 
 ```sh
-liferay server up
-liferay server logs           # tail Tomcat logs
-liferay server logs db        # tail MySQL logs
-liferay server ps
-liferay server down
-liferay server down --wipe    # also deletes MySQL data volume
-liferay server restart
+liferay db up                       # reuses stored engine (default: mysql)
+liferay db up --engine mariadb
+liferay db up --engine postgres
+liferay db up --engine hypersonic   # no container; strips CLI jdbc overrides
+liferay db logs           # tail DB logs
+liferay db logs adminer   # tail Adminer
+liferay db ps
+liferay db down
+liferay db down --wipe    # also deletes the DB data volume
+liferay db restart
 ```
 
-Requires Docker Desktop (macOS/Windows) or Docker Engine (Linux).
+**Supported engines**
 
-Each worktree gets unique port offsets derived from its path:
+| Engine     | Image         | JDBC stanza written to portal-ext.properties                 |
+|------------|---------------|--------------------------------------------------------------|
+| mysql      | `mysql:8.0`   | `com.mysql.cj.jdbc.Driver`, `jdbc:mysql://…/lportal`         |
+| mariadb    | `mariadb:11`  | `org.mariadb.jdbc.Driver`, `jdbc:mariadb://…/lportal`        |
+| postgres   | `postgres:17` | `org.postgresql.Driver`, `jdbc:postgresql://…/lportal`       |
+| hypersonic | none          | no override; Liferay falls back to its built-in HSQL         |
 
-| Service | Default | Worktree N |
-|---------|---------|-----------|
-| Tomcat  | 8080    | 8080+N    |
-| Adminer | 8081    | 8081+N    |
-| Debug   | 8000    | 8000+N    |
-| Gogo    | 13331   | 13331+N   |
-| MySQL   | 3306    | 3306+N    |
+The engine is persisted in `.liferay-cli/docker/ports.json`. `db down`, `db logs`, and `db ps` are no-ops (with a message) when the stored engine is hypersonic.
+
+JDBC drivers for mysql, mariadb, postgres, and hsql already ship in `tomcat-*/webapps/ROOT/WEB-INF/shielded-container-lib/`, so no manual driver install is needed for the supported engines.
+
+Requires Docker Desktop (macOS/Windows) or Docker Engine (Linux) for the non-hypersonic engines.
+
+### Slots: running multiple Liferay instances side-by-side
+
+Each worktree claims a **slot** the first time its DB stack comes up. Slots are allocated sequentially (0, 1, 2, …) by probing for free ports; the first worktree on a host claims slot 0 and runs with **stock** Liferay configuration (no bundle edits, standard ports). Subsequent worktrees claim slot > 0 and get a coordinated port offset plus a bundle patch that rewires the server-side ports.
+
+Slot is persisted in `.liferay-cli/docker/ports.json`. Docker stacks use `-p liferay-slot-<N>` as the compose project name so two worktrees never fight for container names.
+
+**Per-slot ports**
+
+| Service              | Slot 0 (stock) | Slot N offset        |
+|----------------------|----------------|----------------------|
+| Tomcat HTTP          | 8080           | +N                   |
+| Tomcat shutdown      | 8005           | +N                   |
+| Tomcat redirectPort  | 8443           | +N                   |
+| JPDA debug           | 8000           | +N                   |
+| OSGi console / Gogo  | 11311          | +N                   |
+| Elasticsearch HTTP   | 9200           | +N × 101             |
+| Elasticsearch xport  | 9300           | +N × 101             |
+| Glowroot UI          | 4000           | +N                   |
+| Arquillian connector | 32763          | +N                   |
+| DataGuard connector  | 42763          | +N                   |
+| DB (MySQL/MariaDB/PG)| 3306           | +N                   |
+| Adminer              | 8081           | +N                   |
+
+Offset is `+N * 10` for everything except ES HTTP and transport, which use `+N * 101` to keep HTTP and transport ranges from colliding across slots.
+
+**What the patcher touches when slot > 0**
+
+`liferay server start` applies idempotent edits to the bundle before launching Tomcat:
+
+- `tomcat-*/conf/server.xml` — `<Server port>`, HTTP `<Connector port>`, and `redirectPort` attributes
+- `tomcat-*/bin/setenv.sh` — `export JPDA_ADDRESS=<port>`
+- `portal-developer.properties` — `module.framework.properties.osgi.console`
+- `tomcat-*/webapps/ROOT/WEB-INF/classes/portal-developer.properties` — same key (re-applied after rebuild wipes it)
+- `glowroot/admin.json` — `web.port`
+- `osgi/configs/com.liferay.portal.search.elasticsearch8.configuration.ElasticsearchConfiguration.config`
+- `osgi/configs/com.liferay.arquillian.extension.junit.bridge.connector.ArquillianConnector.config`
+- `osgi/configs/com.liferay.data.guard.connector.DataGuardConnector.config`
+
+Slot > 0 also gets `liferay.home=<bundleDir>`, `portal.instance.http.socket.address=localhost:<tomcat>`, and `module.framework.properties.osgi.console=localhost:<osgi>` injected into `portal-ext.properties` alongside the JDBC stanza. Slot 0's `portal-ext.properties` gets only the JDBC stanza — nothing else changes.
+
+### `liferay server`
+
+Host-native Tomcat lifecycle. Wraps `catalina.sh` with `CATALINA_PID` pointing at `<bundle>/.liferay-cli/tomcat.pid` so start/stop/status stay consistent.
+
+`start` and `run` automatically bring up the DB stack for the worktree's stored engine (equivalent to `liferay db up`), apply the slot-specific bundle patches (if slot > 0), and wait for the DB healthcheck before launching Tomcat. For hypersonic, the Docker step is skipped; the patcher still runs for slot > 0.
+
+```sh
+liferay server start             # background (catalina.sh start)
+liferay server start --debug     # background with JDWP on (catalina.sh jpda start)
+liferay server run               # foreground (catalina.sh run)
+liferay server run --debug       # foreground with JDWP on
+liferay server stop              # catalina.sh stop -force
+liferay server restart [--debug]
+liferay server status            # alive / stale-pid / not-running
+liferay server logs              # tail tomcat-*/logs/catalina.out
+liferay server wipe              # stop and delete data/, logs/, osgi/state/, work/, portal-setup-wizard.properties
+```
+
+Debug mode is opt-in so the JPDA port is only bound when you actually need it. `JPDA_ADDRESS` comes from `setenv.sh` — stock slot 0 uses catalina's default 8000; slot > 0 gets the per-slot port the bundle patcher wrote into `setenv.sh`.
+
+Integration tests rely on this host-native Tomcat — the Arquillian junit-bridge and DataGuard connectors both use loopback sockets, which cannot cross the Docker network boundary.
 
 ## Release
 
