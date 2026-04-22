@@ -42,6 +42,7 @@ go install github.com/david-truong/liferay-portal-cli@latest
 | `liferay worktree <add\|list\|remove>` | Create and manage git worktrees |
 | `liferay db <up\|down\|logs\|ps\|restart> [--engine mysql\|mariadb\|postgres\|hypersonic]` | Manage the per-worktree database stack |
 | `liferay server <start\|stop\|restart\|run\|status\|logs\|wipe>` | Manage the host-native Tomcat bundle |
+| `liferay omni-admin <install\|uninstall>` | Install/remove dev-only omni-admin bundles (auto-login, no-captcha, forgiving store) |
 
 ---
 
@@ -282,6 +283,21 @@ liferay server wipe              # stop and delete data/, logs/, osgi/state/, wo
 Debug mode is opt-in so the JPDA port is only bound when you actually need it. `JPDA_ADDRESS` comes from `setenv.sh` — stock slot 0 uses catalina's default 8000; slot > 0 gets the per-slot port the bundle patcher wrote into `setenv.sh`.
 
 Integration tests rely on this host-native Tomcat — the Arquillian junit-bridge and DataGuard connectors both use loopback sockets, which cannot cross the Docker network boundary.
+
+### `liferay omni-admin`
+
+Installs three dev-only OSGi bundles into the active bundle's `osgi/modules/`:
+
+- `omni.admin.autologin` — AutoLogin filter that authenticates requests as an administrator
+- `omni.admin.captcha` — no-op `CaptchaProvider` that disables CAPTCHA portal-wide
+- `omni.admin.store` — `DLStoreWrapper`/`PDFProcessorWrapper` that returns empty files for missing documents
+
+```sh
+liferay omni-admin install     # copy all three jars into osgi/modules
+liferay omni-admin uninstall   # remove them
+```
+
+These bundles bypass authentication and validation. Never install on a shared or production bundle.
 
 ## Release
 
