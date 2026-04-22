@@ -235,17 +235,27 @@ func patchGlowrootAdmin(bundleDir string, ports docker.Ports) error {
 
 // writeElasticsearchConfig materialises the OSGi config that pins the sidecar
 // ES HTTP + transport ports and binds both sockets to IPv4 loopback (avoids
-// occasional IPv6 binding failures drewbrokke documented).
+// occasional IPv6 binding failures drewbrokke documented). Both the ES7 and
+// ES8 config files are written so the correct one is picked up regardless of
+// which Elasticsearch bundle is installed in the portal.
 func writeElasticsearchConfig(bundleDir string, ports docker.Ports) error {
-	path := filepath.Join(bundleDir, "osgi", "configs",
-		"com.liferay.portal.search.elasticsearch8.configuration.ElasticsearchConfiguration.config")
 	content := fmt.Sprintf(
 		"sidecarHttpPort=\"%d\"\n"+
 			"transportTcpPort=\"%d\"\n"+
 			"networkBindHost=\"127.0.0.1\"\n"+
 			"networkPublishHost=\"127.0.0.1\"\n",
 		ports.ESHTTP, ports.ESTransport)
-	return writeOSGiConfig(path, content)
+
+	for _, pid := range []string{
+		"com.liferay.portal.search.elasticsearch7.configuration.ElasticsearchConfiguration",
+		"com.liferay.portal.search.elasticsearch8.configuration.ElasticsearchConfiguration",
+	} {
+		path := filepath.Join(bundleDir, "osgi", "configs", pid+".config")
+		if err := writeOSGiConfig(path, content); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // writeArquillianConfig sets the Arquillian junit-bridge connector port so
