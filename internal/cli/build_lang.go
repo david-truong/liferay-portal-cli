@@ -1,17 +1,19 @@
-package cmd
+package cli
 
 import (
 	"os"
 	"path/filepath"
 
 	"github.com/david-truong/liferay-portal-cli/internal/gradle"
+	"github.com/david-truong/liferay-portal-cli/internal/logrun"
 	"github.com/david-truong/liferay-portal-cli/internal/portal"
 	"github.com/spf13/cobra"
 )
 
 var buildLangCmd = &cobra.Command{
-	Use:   "build-lang",
-	Short: "Build portal language files",
+	Use:     "build-lang",
+	Aliases: []string{"bl"},
+	Short:   "Build portal language files",
 	Long: `Runs "gw buildLang" in modules/apps/portal-language/portal-language-lang.
 
 This is the canonical location for portal-wide language file generation.
@@ -44,8 +46,5 @@ func runBuildLang(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
-	gwCmd.Stdout = os.Stdout
-	gwCmd.Stderr = os.Stderr
-	gwCmd.Stdin = os.Stdin
-	return gwCmd.Run()
+	return logrun.Run(gwCmd, logrun.Options{Label: "build-lang", Verbose: verbose, WorktreeRoot: portalRoot})
 }

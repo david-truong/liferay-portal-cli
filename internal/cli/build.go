@@ -1,12 +1,14 @@
-package cmd
+package cli
 
 import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"runtime"
 
 	"github.com/david-truong/liferay-portal-cli/internal/gradle"
+	"github.com/david-truong/liferay-portal-cli/internal/logrun"
 	"github.com/david-truong/liferay-portal-cli/internal/portal"
 	"github.com/spf13/cobra"
 )
@@ -14,8 +16,9 @@ import (
 var noFormat bool
 
 var buildCmd = &cobra.Command{
-	Use:   "build [module ...]",
-	Short: "Build and deploy Liferay modules",
+	Use:     "build [module ...]",
+	Aliases: []string{"b"},
+	Short:   "Build and deploy Liferay modules",
 	Long: `With no arguments: runs "ant all" from the portal root (full rebuild).
 With module names: resolves each to its directory and runs "gw deploy -a".
 
@@ -56,7 +59,7 @@ func runBuild(cmd *cobra.Command, args []string) error {
 		if err != nil {
 			return err
 		}
-		if err := runGwDeploy(modulePath); err != nil {
+		if err := runGwDeploy(portalRoot, modulePath); err != nil {
 			return fmt.Errorf("deploying %s: %w", name, err)
 		}
 	}
@@ -77,13 +80,10 @@ func runAntAll(portalRoot string) error {
 
 	cmd := exec.Command(path, "all")
 	cmd.Dir = portalRoot
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	cmd.Stdin = os.Stdin
-	return cmd.Run()
+	return logrun.Run(cmd, logrun.Options{Label: "build-all", Verbose: verbose, WorktreeRoot: portalRoot})
 }
 
-func runGwDeploy(moduleDir string) error {
+func runGwDeploy(portalRoot, moduleDir string) error {
 	gwArgs := []string{"deploy"}
 	if !noFormat {
 		gwArgs = append(gwArgs, "-a")
@@ -93,8 +93,5 @@ func runGwDeploy(moduleDir string) error {
 	if err != nil {
 		return err
 	}
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	cmd.Stdin = os.Stdin
-	return cmd.Run()
+	return logrun.Run(cmd, logrun.Options{Label: "deploy-" + filepath.Base(moduleDir), Verbose: verbose, WorktreeRoot: portalRoot})
 }

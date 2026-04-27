@@ -1,4 +1,4 @@
-package cmd
+package cli
 
 import (
 	"fmt"
@@ -14,8 +14,9 @@ import (
 )
 
 var worktreeCmd = &cobra.Command{
-	Use:   "worktree",
-	Short: "Manage git worktrees for liferay-portal",
+	Use:     "worktree",
+	Aliases: []string{"wt"},
+	Short:   "Manage git worktrees for liferay-portal",
 }
 
 var worktreeAddCmd = &cobra.Command{
@@ -31,10 +32,12 @@ required for Liferay development:
     build.*.properties, test.*.properties, release.*.properties, .env
 
   Generated:
-    app.server.<user>.properties  — points bundles/ inside the worktree
+    app.server.<user>.properties       — points bundles/ inside the worktree
+    bundles/portal-setup-wizard.properties — skips setup wizard on first boot
 
-The worktree's bundle directory is left empty; run "ant all" or
-"liferay build" to populate it before using "liferay server up".`,
+The worktree's bundle directory is left empty (apart from the setup-wizard
+properties); run "ant all" or "liferay build" to populate it before using
+"liferay server up".`,
 	Args: cobra.ExactArgs(2),
 	RunE: runWorktreeAdd,
 }
@@ -181,6 +184,29 @@ func propagatePortalFiles(primaryRoot, worktreeRoot string) error {
 			fmt.Fprintf(os.Stderr, "warning: could not write %s: %v\n", appServerFile, err)
 		} else {
 			results = append(results, result{appServerFile, "generated", "bundles/ will be inside this worktree"})
+		}
+	}
+
+	// --- Generate bundles/portal-setup-wizard.properties ---
+	setupWizardRel := filepath.Join("bundles", "portal-setup-wizard.properties")
+	setupWizardDst := filepath.Join(worktreeRoot, setupWizardRel)
+	if fsutil.Exists(setupWizardDst) {
+		results = append(results, result{setupWizardRel, "skipped", "already exists"})
+	} else if err := os.MkdirAll(filepath.Dir(setupWizardDst), 0755); err != nil {
+		fmt.Fprintf(os.Stderr, "warning: could not create bundles/: %v\n", err)
+	} else {
+		content := "admin.email.from.address=test@liferay.com\n" +
+			"admin.email.from.name=Test Test\n" +
+			"company.default.locale=en_US\n" +
+			"company.default.time.zone=UTC\n" +
+			"company.default.web.id=liferay.com\n" +
+			"default.admin.email.address.prefix=test\n" +
+			"liferay.home=" + filepath.Join(worktreeRoot, "bundles") + "\n" +
+			"setup.wizard.enabled=false\n"
+		if err := os.WriteFile(setupWizardDst, []byte(content), 0644); err != nil {
+			fmt.Fprintf(os.Stderr, "warning: could not write %s: %v\n", setupWizardRel, err)
+		} else {
+			results = append(results, result{setupWizardRel, "generated", "skips setup wizard on first boot"})
 		}
 	}
 

@@ -1,4 +1,4 @@
-package cmd
+package cli
 
 import (
 	"fmt"
@@ -6,13 +6,15 @@ import (
 	"path/filepath"
 
 	"github.com/david-truong/liferay-portal-cli/internal/gradle"
+	"github.com/david-truong/liferay-portal-cli/internal/logrun"
 	"github.com/david-truong/liferay-portal-cli/internal/portal"
 	"github.com/spf13/cobra"
 )
 
 var buildRESTCmd = &cobra.Command{
-	Use:   "build-rest <module>",
-	Short: "Run REST Builder for a Liferay module",
+	Use:     "build-rest <module>",
+	Aliases: []string{"br"},
+	Short:   "Run REST Builder for a Liferay module",
 	Long: `Resolves the module by name and runs "gw buildREST" in its directory.
 The module must contain a rest-config.yaml file.
 
@@ -58,8 +60,5 @@ func runBuildREST(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
-	gwCmd.Stdout = os.Stdout
-	gwCmd.Stderr = os.Stderr
-	gwCmd.Stdin = os.Stdin
-	return gwCmd.Run()
+	return logrun.Run(gwCmd, logrun.Options{Label: "build-rest-" + filepath.Base(modulePath), Verbose: verbose, WorktreeRoot: portalRoot})
 }

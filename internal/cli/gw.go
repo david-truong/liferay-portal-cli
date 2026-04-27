@@ -1,16 +1,19 @@
-package cmd
+package cli
 
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 
 	"github.com/david-truong/liferay-portal-cli/internal/gradle"
+	"github.com/david-truong/liferay-portal-cli/internal/logrun"
 	"github.com/david-truong/liferay-portal-cli/internal/portal"
 	"github.com/spf13/cobra"
 )
 
 var gwCmd = &cobra.Command{
-	Use:                "gw <module> [gradle-args...]",
+	Use:                "gradle-wrapper <module> [gradle-args...]",
+	Aliases:            []string{"gw"},
 	Short:              "Run a Gradle task in a Liferay module",
 	Long: `Resolves the module by name and runs gradlew with the given arguments.
 
@@ -58,8 +61,5 @@ func runGw(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
-	gwCmd.Stdout = os.Stdout
-	gwCmd.Stderr = os.Stderr
-	gwCmd.Stdin = os.Stdin
-	return gwCmd.Run()
+	return logrun.Run(gwCmd, logrun.Options{Label: "gw-" + filepath.Base(modulePath), Verbose: verbose, WorktreeRoot: portalRoot})
 }

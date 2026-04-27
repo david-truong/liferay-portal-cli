@@ -1,10 +1,11 @@
-package cmd
+package cli
 
 import (
 	"os"
 	"path/filepath"
 
 	"github.com/david-truong/liferay-portal-cli/internal/gradle"
+	"github.com/david-truong/liferay-portal-cli/internal/logrun"
 	"github.com/david-truong/liferay-portal-cli/internal/portal"
 	"github.com/spf13/cobra"
 )
@@ -48,8 +49,5 @@ func runPoshi(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
-	gwCmd.Stdout = os.Stdout
-	gwCmd.Stderr = os.Stderr
-	gwCmd.Stdin = os.Stdin
-	return gwCmd.Run()
+	return logrun.Run(gwCmd, logrun.Options{Label: "poshi", Verbose: verbose, WorktreeRoot: portalRoot})
 }

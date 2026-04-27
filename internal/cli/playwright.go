@@ -1,4 +1,4 @@
-package cmd
+package cli
 
 import (
 	"fmt"
@@ -13,8 +13,9 @@ import (
 var playwrightTests string
 
 var playwrightCmd = &cobra.Command{
-	Use:   "playwright",
-	Short: "Run Playwright end-to-end tests",
+	Use:     "playwright",
+	Aliases: []string{"pw"},
+	Short:   "Run Playwright end-to-end tests",
 	Long: `Runs Playwright tests from modules/test/playwright using npx.
 
 --tests is passed as --grep to the Playwright test runner.

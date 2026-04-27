@@ -1,4 +1,4 @@
-package cmd
+package cli
 
 import (
 	"fmt"
@@ -12,8 +12,9 @@ import (
 )
 
 var serverCmd = &cobra.Command{
-	Use:   "server",
-	Short: "Manage the host-native Tomcat server",
+	Use:     "server",
+	Aliases: []string{"s"},
+	Short:   "Manage the host-native Tomcat server",
 	Long: `Starts, stops, and inspects the Liferay Tomcat bundle on the host.
 
 Runs catalina.sh directly under the bundle's tomcat-*/bin directory, with

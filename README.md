@@ -19,10 +19,20 @@ Every command in this CLI upholds three guarantees:
 brew install david-truong/liferay/liferay
 
 # Any platform with Go installed
-go install github.com/david-truong/liferay-portal-cli@latest
+go install github.com/david-truong/liferay-portal-cli/cmd/liferay@latest
 
 # Windows: download from GitHub Releases, or use go install above
 ```
+
+### Local development
+
+From a clone of this repo:
+
+```sh
+go install ./cmd/liferay
+```
+
+This drops a `liferay` binary into `$(go env GOPATH)/bin`. Make sure that directory is on your `PATH` (or symlink the binary into one that is). All other forms (`go build`, `go build ./...`) only compile-check — only `go install ./cmd/liferay` updates the binary on `PATH`.
 
 ## Commands
 

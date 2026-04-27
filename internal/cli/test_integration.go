@@ -1,4 +1,4 @@
-package cmd
+package cli
 
 import (
 	"fmt"
@@ -7,6 +7,7 @@ import (
 
 	"github.com/david-truong/liferay-portal-cli/internal/docker"
 	"github.com/david-truong/liferay-portal-cli/internal/gradle"
+	"github.com/david-truong/liferay-portal-cli/internal/logrun"
 	"github.com/david-truong/liferay-portal-cli/internal/portal"
 	"github.com/spf13/cobra"
 )
@@ -14,8 +15,9 @@ import (
 var testIntegrationTests string
 
 var testIntegrationCmd = &cobra.Command{
-	Use:   "test-integration <module>",
-	Short: "Run integration tests for a Liferay module",
+	Use:     "test-integration <module>",
+	Aliases: []string{"ti"},
+	Short:   "Run integration tests for a Liferay module",
 	Long: `Resolves the module by name and runs "gw testIntegration --tests <filter>" in its directory.
 
 --tests accepts any pattern supported by Gradle's Test task.
@@ -78,10 +80,7 @@ func runTestIntegration(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
-	gwCmd.Stdout = os.Stdout
-	gwCmd.Stderr = os.Stderr
-	gwCmd.Stdin = os.Stdin
-	return gwCmd.Run()
+	return logrun.Run(gwCmd, logrun.Options{Label: "test-integration-" + filepath.Base(modulePath), Verbose: verbose, WorktreeRoot: portalRoot})
 }
 
 // writeSlotInitScript writes .gradle/liferay-test-integration-init.gradle if

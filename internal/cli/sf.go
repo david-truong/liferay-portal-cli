@@ -1,4 +1,4 @@
-package cmd
+package cli
 
 import (
 	"fmt"
@@ -8,13 +8,15 @@ import (
 	"runtime"
 
 	"github.com/david-truong/liferay-portal-cli/internal/gradle"
+	"github.com/david-truong/liferay-portal-cli/internal/logrun"
 	"github.com/david-truong/liferay-portal-cli/internal/portal"
 	"github.com/spf13/cobra"
 )
 
 var sfCmd = &cobra.Command{
-	Use:   "sf [module ...]",
-	Short: "Run source formatter for Liferay modules",
+	Use:     "source-format [module ...]",
+	Aliases: []string{"sf"},
+	Short:   "Run source formatter for Liferay modules",
 	Long: `With no arguments: runs "ant format-source-current-branch" from portal-impl.
 With module names: resolves each to its directory and runs "gw formatSource".
 
@@ -54,7 +56,7 @@ func runSf(cmd *cobra.Command, args []string) error {
 		if err != nil {
 			return err
 		}
-		if err := runGwFormatSource(modulePath); err != nil {
+		if err := runGwFormatSource(portalRoot, modulePath); err != nil {
 			return fmt.Errorf("formatting %s: %w", name, err)
 		}
 	}
@@ -75,19 +77,13 @@ func runAntFormatSource(portalRoot string) error {
 
 	cmd := exec.Command(path, "format-source-current-branch")
 	cmd.Dir = filepath.Join(portalRoot, "portal-impl")
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	cmd.Stdin = os.Stdin
-	return cmd.Run()
+	return logrun.Run(cmd, logrun.Options{Label: "format-source", Verbose: verbose, WorktreeRoot: portalRoot})
 }
 
-func runGwFormatSource(moduleDir string) error {
+func runGwFormatSource(portalRoot, moduleDir string) error {
 	cmd, err := gradle.Command(moduleDir, "formatSource")
 	if err != nil {
 		return err
 	}
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	cmd.Stdin = os.Stdin
-	return cmd.Run()
+	return logrun.Run(cmd, logrun.Options{Label: "format-source-" + filepath.Base(moduleDir), Verbose: verbose, WorktreeRoot: portalRoot})
 }

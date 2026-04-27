@@ -1,4 +1,4 @@
-package cmd
+package cli
 
 import (
 	"fmt"
@@ -11,8 +11,9 @@ import (
 )
 
 var dbCmd = &cobra.Command{
-	Use:   "db",
-	Short: "Manage the per-worktree database stack",
+	Use:     "database",
+	Aliases: []string{"db"},
+	Short:   "Manage the per-worktree database stack",
 	Long: `Runs a per-worktree database container (+ Adminer) in Docker and
 rewrites the bundle's portal-ext.properties with the matching JDBC stanza.
 

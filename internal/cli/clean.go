@@ -1,19 +1,22 @@
-package cmd
+package cli
 
 import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"runtime"
 
 	"github.com/david-truong/liferay-portal-cli/internal/gradle"
+	"github.com/david-truong/liferay-portal-cli/internal/logrun"
 	"github.com/david-truong/liferay-portal-cli/internal/portal"
 	"github.com/spf13/cobra"
 )
 
 var cleanCmd = &cobra.Command{
-	Use:   "clean [module ...]",
-	Short: "Clean the portal or specific modules",
+	Use:     "clean [module ...]",
+	Aliases: []string{"c"},
+	Short:   "Clean the portal or specific modules",
 	Long: `With no arguments: runs "ant clean" from the portal root.
 With module names: resolves each to its directory and runs "gw clean".
 
@@ -55,7 +58,7 @@ func runClean(cmd *cobra.Command, args []string) error {
 		if err != nil {
 			return err
 		}
-		if err := runGwClean(modulePath); err != nil {
+		if err := runGwClean(portalRoot, modulePath); err != nil {
 			return fmt.Errorf("cleaning %s: %w", name, err)
 		}
 	}
@@ -76,19 +79,13 @@ func runAntClean(portalRoot string) error {
 
 	cmd := exec.Command(path, "clean")
 	cmd.Dir = portalRoot
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	cmd.Stdin = os.Stdin
-	return cmd.Run()
+	return logrun.Run(cmd, logrun.Options{Label: "clean-all", Verbose: verbose, WorktreeRoot: portalRoot})
 }
 
-func runGwClean(moduleDir string) error {
+func runGwClean(portalRoot, moduleDir string) error {
 	cmd, err := gradle.Command(moduleDir, "clean")
 	if err != nil {
 		return err
 	}
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	cmd.Stdin = os.Stdin
-	return cmd.Run()
+	return logrun.Run(cmd, logrun.Options{Label: "clean-" + filepath.Base(moduleDir), Verbose: verbose, WorktreeRoot: portalRoot})
 }

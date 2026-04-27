@@ -1,10 +1,12 @@
-package cmd
+package cli
 
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 
 	"github.com/david-truong/liferay-portal-cli/internal/gradle"
+	"github.com/david-truong/liferay-portal-cli/internal/logrun"
 	"github.com/david-truong/liferay-portal-cli/internal/portal"
 	"github.com/spf13/cobra"
 )
@@ -12,8 +14,9 @@ import (
 var testTests string
 
 var testCmd = &cobra.Command{
-	Use:   "test <module>",
-	Short: "Run unit tests for a Liferay module",
+	Use:     "test <module>",
+	Aliases: []string{"t"},
+	Short:   "Run unit tests for a Liferay module",
 	Long: `Resolves the module by name and runs "gw test --tests <filter>" in its directory.
 
 --tests accepts any pattern supported by Gradle's Test task:
@@ -59,8 +62,5 @@ func runTest(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
-	gwCmd.Stdout = os.Stdout
-	gwCmd.Stderr = os.Stderr
-	gwCmd.Stdin = os.Stdin
-	return gwCmd.Run()
+	return logrun.Run(gwCmd, logrun.Options{Label: "test-" + filepath.Base(modulePath), Verbose: verbose, WorktreeRoot: portalRoot})
 }

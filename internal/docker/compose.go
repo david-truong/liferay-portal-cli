@@ -189,7 +189,12 @@ var portalExtOverrideKeys = map[string]bool{
 	"liferay.home":                             true,
 	"portal.instance.http.socket.address":      true,
 	"module.framework.properties.osgi.console": true,
+	"browser.launcher.url":                     true,
 }
+
+// browserLauncherOverride suppresses Liferay's auto-open-browser-on-startup
+// behavior. Always emitted — agent-driven workflows should never pop a window.
+const browserLauncherOverride = "browser.launcher.url=\n"
 
 // slotOverridesStanza returns the non-JDBC key block we inject for slot > 0.
 // For slot 0 (stock) it returns the empty string so the bundle keeps its
@@ -400,12 +405,11 @@ func writePortalExt(bundleDir, engine string, ports Ports) error {
 	jdbcStanza := portalExtStanza(engine, ports.MySQL)
 	slotStanza := slotOverridesStanza(bundleDir, ports)
 
-	if jdbcStanza != "" || slotStanza != "" {
-		sb.WriteString("# Begin liferay-cli portal-ext overrides — regenerated on each \"liferay db up\". Do not edit.\n")
-		sb.WriteString(jdbcStanza)
-		sb.WriteString(slotStanza)
-		sb.WriteString("# End liferay-cli portal-ext overrides.\n")
-	}
+	sb.WriteString("# Begin liferay-cli portal-ext overrides — regenerated on each \"liferay db up\". Do not edit.\n")
+	sb.WriteString(jdbcStanza)
+	sb.WriteString(slotStanza)
+	sb.WriteString(browserLauncherOverride)
+	sb.WriteString("# End liferay-cli portal-ext overrides.\n")
 
 	return os.WriteFile(path, []byte(sb.String()), 0644)
 }
