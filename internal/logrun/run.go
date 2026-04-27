@@ -52,6 +52,13 @@ func Run(cmd *exec.Cmd, opts Options) error {
 	}
 	defer logFile.Close()
 
+	displayPath := logPath
+	if opts.WorktreeRoot != "" {
+		if rel, err := filepath.Rel(opts.WorktreeRoot, logPath); err == nil {
+			displayPath = rel
+		}
+	}
+
 	var out, errOut io.Writer = logFile, logFile
 	if opts.Verbose {
 		out = io.MultiWriter(os.Stdout, logFile)
@@ -61,19 +68,19 @@ func Run(cmd *exec.Cmd, opts Options) error {
 	cmd.Stderr = errOut
 	cmd.Stdin = nil
 
-	fmt.Fprintf(os.Stderr, "[%s] running (log: %s)\n", opts.Label, logPath)
+	fmt.Fprintf(os.Stderr, "[%s] running (log: %s)\n", opts.Label, displayPath)
 	start := time.Now()
 	runErr := cmd.Run()
 	dur := time.Since(start).Round(time.Second)
 
 	if runErr != nil {
 		if !opts.Verbose {
-			printTail(logPath, opts.TailLines)
+			printTail(logPath, displayPath, opts.TailLines)
 		}
-		fmt.Fprintf(os.Stderr, "[%s] FAILED in %s (log: %s)\n", opts.Label, dur, logPath)
+		fmt.Fprintf(os.Stderr, "[%s] FAILED in %s (log: %s)\n", opts.Label, dur, displayPath)
 		return runErr
 	}
-	fmt.Fprintf(os.Stderr, "[%s] OK in %s (log: %s)\n", opts.Label, dur, logPath)
+	fmt.Fprintf(os.Stderr, "[%s] OK in %s (log: %s)\n", opts.Label, dur, displayPath)
 	return nil
 }
 
@@ -101,7 +108,7 @@ func newLogPath(label, worktreeRoot string) (string, error) {
 
 // printTail writes the last n lines of logPath to stderr, framed so the
 // failure block stands out in agent transcripts.
-func printTail(logPath string, n int) {
+func printTail(logPath, displayPath string, n int) {
 	f, err := os.Open(logPath)
 	if err != nil {
 		return
@@ -118,7 +125,7 @@ func printTail(logPath string, n int) {
 		ring = append(ring, scanner.Text())
 	}
 
-	fmt.Fprintf(os.Stderr, "----- last %d lines of %s -----\n", len(ring), logPath)
+	fmt.Fprintf(os.Stderr, "----- last %d lines of %s -----\n", len(ring), displayPath)
 	for _, line := range ring {
 		fmt.Fprintln(os.Stderr, line)
 	}
