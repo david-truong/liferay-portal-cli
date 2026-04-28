@@ -15,6 +15,18 @@ import (
 
 var noFormat bool
 
+// antDeployProjects are root-level Ant projects that have no bnd.bnd and are
+// deployed via "ant deploy" from their own directory (see root build.xml's
+// "deploy" target).
+var antDeployProjects = map[string]bool{
+	"portal-impl":   true,
+	"portal-kernel": true,
+	"util-bridges":  true,
+	"util-java":     true,
+	"util-slf4j":    true,
+	"util-taglib":   true,
+}
+
 var buildCmd = &cobra.Command{
 	Use:     "build [module ...]",
 	Aliases: []string{"b"},
@@ -22,10 +34,14 @@ var buildCmd = &cobra.Command{
 	Long: `With no arguments: runs "ant all" from the portal root (full rebuild).
 With module names: resolves each to its directory and runs "gw deploy -a".
 
+The root-level Ant projects (portal-impl, portal-kernel, util-bridges,
+util-java, util-slf4j, util-taglib) are deployed via "ant deploy" instead.
+
 Examples:
   liferay build
   liferay build change-tracking-web
-  liferay build change-tracking-web blogs-web`,
+  liferay build change-tracking-web blogs-web
+  liferay build portal-impl`,
 	RunE: runBuild,
 }
 
@@ -55,6 +71,12 @@ func runBuild(cmd *cobra.Command, args []string) error {
 	}
 
 	for _, name := range args {
+		if antDeployProjects[name] {
+			if err := runAntDeploy(portalRoot, filepath.Join(portalRoot, name)); err != nil {
+				return fmt.Errorf("deploying %s: %w", name, err)
+			}
+			continue
+		}
 		modulePath, err := idx.Resolve(name)
 		if err != nil {
 			return err
@@ -64,6 +86,23 @@ func runBuild(cmd *cobra.Command, args []string) error {
 		}
 	}
 	return nil
+}
+
+func runAntDeploy(portalRoot, projectDir string) error {
+	antName := "ant"
+	if runtime.GOOS == "windows" {
+		if _, err := exec.LookPath("ant"); err != nil {
+			antName = "ant.bat"
+		}
+	}
+	path, err := exec.LookPath(antName)
+	if err != nil {
+		return fmt.Errorf("ant not found on PATH — install Apache Ant (https://ant.apache.org/)")
+	}
+
+	cmd := exec.Command(path, "deploy")
+	cmd.Dir = projectDir
+	return logrun.Run(cmd, logrun.Options{Label: "deploy-" + filepath.Base(projectDir), Verbose: verbose, WorktreeRoot: portalRoot})
 }
 
 func runAntAll(portalRoot string) error {

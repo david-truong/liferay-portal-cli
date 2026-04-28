@@ -78,6 +78,12 @@ Module names match the leaf directory containing `bnd.bnd`. Use `group/name` to 
 liferay build change-tracking/change-tracking-web
 ```
 
+The root-level Ant projects (`portal-impl`, `portal-kernel`, `util-bridges`, `util-java`, `util-slf4j`, `util-taglib`) are deployed via `ant deploy` from their own directory:
+
+```sh
+liferay build portal-impl
+```
+
 ### `liferay clean`
 
 Full portal clean:
