@@ -3,6 +3,7 @@ package cli
 import (
 	"os"
 
+	"github.com/david-truong/liferay-portal-cli/internal/portal"
 	"github.com/spf13/cobra"
 )
 
@@ -17,6 +18,17 @@ Every command works from a single working directory (the portal root) with no cd
 no interactive prompts, and no arcane flags. Human developers should keep using
 gw, blade, and their IDE.`,
 	SilenceUsage: true,
+	PersistentPreRun: func(cmd *cobra.Command, args []string) {
+		cwd, err := os.Getwd()
+		if err != nil {
+			return
+		}
+		portalRoot, err := portal.FindRoot(cwd)
+		if err != nil {
+			return
+		}
+		autofixWorktree(portalRoot)
+	},
 }
 
 func init() {
