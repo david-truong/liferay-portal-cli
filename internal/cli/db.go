@@ -2,8 +2,6 @@ package cli
 
 import (
 	"fmt"
-	"os"
-	"path/filepath"
 
 	"github.com/david-truong/liferay-portal-cli/internal/docker"
 	"github.com/david-truong/liferay-portal-cli/internal/portal"
@@ -38,7 +36,7 @@ var dbUpCmd = &cobra.Command{
 
 var dbDownCmd = &cobra.Command{
 	Use:   "down",
-	Short: "Stop the database stack (preserves data)",
+	Short: "Stop the database stack and discard data",
 	RunE:  runDBDown,
 }
 
@@ -88,11 +86,8 @@ var dbPsCmd = &cobra.Command{
 	},
 }
 
-var dbWipeOnDown bool
-
 func init() {
 	dbUpCmd.Flags().StringVar(&dbEngine, "engine", "", "Database engine (mysql|mariadb|postgres|hypersonic); reuses the stored engine when omitted")
-	dbDownCmd.Flags().BoolVar(&dbWipeOnDown, "wipe", false, "Also delete the database data volume")
 	dbCmd.AddCommand(dbUpCmd, dbDownCmd, dbRestartCmd, dbLogsCmd, dbPsCmd)
 	rootCmd.AddCommand(dbCmd)
 }
@@ -144,30 +139,5 @@ func runDBDown(_ *cobra.Command, _ []string) error {
 		return nil
 	}
 
-	args := []string{"down"}
-	if dbWipeOnDown {
-		args = append(args, "-v")
-		defer wipeDBVolume(worktreeRoot, state.Engine)
-	}
-	return docker.Run(worktreeRoot, args...)
-}
-
-func wipeDBVolume(worktreeRoot, engine string) {
-	sub := dbDataSubdir(engine)
-	dbDir := filepath.Join(docker.StateDir(worktreeRoot), "db", sub)
-	if err := os.RemoveAll(dbDir); err != nil {
-		fmt.Fprintf(os.Stderr, "warning: could not remove %s: %v\n", dbDir, err)
-	} else {
-		fmt.Printf("Removed %s data at %s\n", engine, dbDir)
-	}
-}
-
-func dbDataSubdir(engine string) string {
-	switch engine {
-	case docker.EngineMariaDB:
-		return "mariadb"
-	case docker.EnginePostgres:
-		return "postgres"
-	}
-	return "mysql"
+	return docker.Run(worktreeRoot, "down")
 }

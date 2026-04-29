@@ -59,7 +59,6 @@ const composeTemplateMySQL = `services:
       - --skip-log-bin
     volumes:
       - ./db/log:/var/log/mysql
-      - ./db/mysql:/var/lib/mysql
     restart: always
     environment:
       MYSQL_ROOT_PASSWORD: root
@@ -88,8 +87,6 @@ const composeTemplateMariaDB = `services:
       - --innodb-buffer-pool-size=1G
       - --net-buffer-length=1000000
       - --max-allowed-packet=1000000000
-    volumes:
-      - ./db/mariadb:/var/lib/mysql
     restart: always
     environment:
       MARIADB_ROOT_PASSWORD: root
@@ -113,8 +110,6 @@ const composeTemplateMariaDB = `services:
 const composeTemplatePostgres = `services:
   db:
     image: postgres:17
-    volumes:
-      - ./db/postgres:/var/lib/postgresql/data
     restart: always
     environment:
       POSTGRES_USER: liferay

@@ -218,8 +218,7 @@ liferay db up --engine hypersonic   # no container; strips CLI jdbc overrides
 liferay db logs           # tail DB logs
 liferay db logs adminer   # tail Adminer
 liferay db ps
-liferay db down
-liferay db down --wipe    # also deletes the DB data volume
+liferay db down           # stops containers; data is not persisted
 liferay db restart
 ```
 
