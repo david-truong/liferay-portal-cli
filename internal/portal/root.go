@@ -32,9 +32,42 @@ func IsPortalRepo(dir string) bool {
 // BundleDir returns the resolved bundle directory for the given portal root,
 // honouring app.server.properties and app.server.<user>.properties overrides.
 func BundleDir(portalRoot string) (string, error) {
+	props := readAppServerProps(portalRoot)
+
+	dir := props["app.server.parent.dir"]
+	if dir == "" {
+		dir = filepath.Join(filepath.Dir(portalRoot), "bundles")
+	} else {
+		dir = resolveProperty(dir, portalRoot, props)
+	}
+	return filepath.Clean(dir), nil
+}
+
+// FindTomcatDir resolves the Tomcat directory from app.server.properties
+// rather than scanning the filesystem, so the version is always authoritative.
+func FindTomcatDir(portalRoot string) (string, error) {
+	props := readAppServerProps(portalRoot)
+
+	dir := props["app.server.tomcat.dir"]
+	if dir == "" {
+		version := props["app.server.tomcat.version"]
+		if version == "" {
+			return "", fmt.Errorf("app.server.tomcat.version not set in %s/app.server.properties", portalRoot)
+		}
+		bundleDir, err := BundleDir(portalRoot)
+		if err != nil {
+			return "", err
+		}
+		return filepath.Join(bundleDir, "tomcat-"+version), nil
+	}
+
+	return filepath.Clean(resolveProperty(dir, portalRoot, props)), nil
+}
+
+func readAppServerProps(portalRoot string) map[string]string {
 	props, err := ReadProperties(filepath.Join(portalRoot, "app.server.properties"))
 	if err != nil {
-		return "", fmt.Errorf("reading app.server.properties: %w", err)
+		props = map[string]string{}
 	}
 
 	if u, err := user.Current(); err == nil {
@@ -45,28 +78,21 @@ func BundleDir(portalRoot string) (string, error) {
 			}
 		}
 	}
-
-	dir := props["app.server.parent.dir"]
-	if dir == "" {
-		dir = filepath.Join(filepath.Dir(portalRoot), "bundles")
-	} else {
-		dir = strings.ReplaceAll(dir, "${project.dir}", portalRoot)
-	}
-	return filepath.Clean(dir), nil
+	return props
 }
 
-// FindTomcatDir locates the tomcat-* directory inside bundleDir.
-func FindTomcatDir(bundleDir string) (string, error) {
-	entries, err := os.ReadDir(bundleDir)
-	if err != nil {
-		return "", fmt.Errorf("cannot read bundle dir %s: %w", bundleDir, err)
-	}
-	for _, e := range entries {
-		if e.IsDir() && strings.HasPrefix(e.Name(), "tomcat-") {
-			return filepath.Join(bundleDir, e.Name()), nil
+func resolveProperty(value, portalRoot string, props map[string]string) string {
+	props["project.dir"] = portalRoot
+	for i := 0; i < 10 && strings.Contains(value, "${"); i++ {
+		prev := value
+		for k, v := range props {
+			value = strings.ReplaceAll(value, "${"+k+"}", v)
+		}
+		if value == prev {
+			break
 		}
 	}
-	return "", fmt.Errorf("no tomcat-* directory found in %s", bundleDir)
+	return value
 }
 
 func isPortalRoot(dir string) bool {

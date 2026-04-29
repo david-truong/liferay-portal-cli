@@ -6,6 +6,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strings"
 
 	"github.com/david-truong/liferay-portal-cli/internal/gradle"
 	"github.com/david-truong/liferay-portal-cli/internal/logrun"
@@ -52,6 +53,9 @@ func runSf(cmd *cobra.Command, args []string) error {
 	}
 
 	for _, name := range args {
+		if strings.Contains(name, ".") {
+			return fmt.Errorf("%q looks like a file path — liferay sf only accepts module names (e.g. \"change-tracking-web\")", name)
+		}
 		modulePath, err := idx.Resolve(name)
 		if err != nil {
 			return err

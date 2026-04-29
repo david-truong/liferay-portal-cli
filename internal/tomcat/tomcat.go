@@ -25,8 +25,9 @@ type Paths struct {
 }
 
 // Resolve locates the Tomcat install under bundleDir and returns a Paths struct.
-func Resolve(bundleDir string) (Paths, error) {
-	tomcatDir, err := portal.FindTomcatDir(bundleDir)
+// portalRoot is used to read the tomcat version from app.server.properties.
+func Resolve(portalRoot, bundleDir string) (Paths, error) {
+	tomcatDir, err := portal.FindTomcatDir(portalRoot)
 	if err != nil {
 		return Paths{}, err
 	}

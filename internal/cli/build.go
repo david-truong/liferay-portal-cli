@@ -6,6 +6,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strings"
 
 	"github.com/david-truong/liferay-portal-cli/internal/gradle"
 	"github.com/david-truong/liferay-portal-cli/internal/logrun"
@@ -81,7 +82,11 @@ func runBuild(cmd *cobra.Command, args []string) error {
 		if err != nil {
 			return err
 		}
-		if err := runGwDeploy(portalRoot, modulePath); err != nil {
+		if strings.HasSuffix(name, "-test") {
+			if err := runGwCompileTest(portalRoot, modulePath); err != nil {
+				return fmt.Errorf("compiling test %s: %w", name, err)
+			}
+		} else if err := runGwDeploy(portalRoot, modulePath); err != nil {
 			return fmt.Errorf("deploying %s: %w", name, err)
 		}
 	}
@@ -120,6 +125,14 @@ func runAntAll(portalRoot string) error {
 	cmd := exec.Command(path, "all")
 	cmd.Dir = portalRoot
 	return logrun.Run(cmd, logrun.Options{Label: "build-all", Verbose: verbose, WorktreeRoot: portalRoot})
+}
+
+func runGwCompileTest(portalRoot, moduleDir string) error {
+	cmd, err := gradle.Command(moduleDir, "compileTestIntegrationJava")
+	if err != nil {
+		return err
+	}
+	return logrun.Run(cmd, logrun.Options{Label: "compile-test-" + filepath.Base(moduleDir), Verbose: verbose, WorktreeRoot: portalRoot})
 }
 
 func runGwDeploy(portalRoot, moduleDir string) error {

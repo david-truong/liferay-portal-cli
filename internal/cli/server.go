@@ -227,7 +227,7 @@ func resolvePaths() (tomcat.Paths, error) {
 	if err != nil {
 		return tomcat.Paths{}, fmt.Errorf("resolving bundle dir: %w", err)
 	}
-	paths, err := tomcat.Resolve(bundleDir)
+	paths, err := tomcat.Resolve(worktreeRoot, bundleDir)
 	if err != nil {
 		return tomcat.Paths{}, fmt.Errorf(
 			"%w\n\nRun \"ant all\" or \"liferay build\" to populate the bundle first", err)
