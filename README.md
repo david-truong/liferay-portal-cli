@@ -249,20 +249,20 @@ Slot is persisted in `~/.liferay-cli/worktrees/<id>/docker/ports.json`. Docker s
 
 | Service              | Slot 0 (stock) | Slot N offset        |
 |----------------------|----------------|----------------------|
-| Tomcat HTTP          | 8080           | +N                   |
-| Tomcat shutdown      | 8005           | +N                   |
-| Tomcat redirectPort  | 8443           | +N                   |
-| JPDA debug           | 8000           | +N                   |
-| OSGi console / Gogo  | 11311          | +N                   |
+| Tomcat HTTP          | 8080           | +N × 10              |
+| Tomcat shutdown      | 8005           | +N × 10              |
+| Tomcat redirectPort  | 8443           | +N × 10              |
+| JPDA debug           | 8000           | +N × 10              |
+| OSGi console / Gogo  | 11311          | +N × 10              |
 | Elasticsearch HTTP   | 9200           | +N × 101             |
 | Elasticsearch xport  | 9300           | +N × 101             |
-| Glowroot UI          | 4000           | +N                   |
-| Arquillian connector | 32763          | +N                   |
-| DataGuard connector  | 42763          | +N                   |
-| DB (MySQL/MariaDB/PG)| 3306           | +N                   |
-| Adminer              | 8081           | +N                   |
+| Glowroot UI          | 4000           | +N × 10              |
+| Arquillian connector | 32763          | +N × 10              |
+| DataGuard connector  | 42763          | +N × 10              |
+| DB (MySQL/MariaDB/PG)| 3306           | +N × 10              |
+| Adminer              | 8081           | +N × 10              |
 
-Offset is `+N * 10` for everything except ES HTTP and transport, which use `+N * 101` to keep HTTP and transport ranges from colliding across slots.
+ES uses `+N × 101` instead of `+N × 10` so HTTP and transport ranges don't collide across slots.
 
 **What the patcher touches when slot > 0**
 
