@@ -1,10 +1,10 @@
 # liferay CLI
 
-> **Built for AI agents, not human developers.**
+> **Built for AI agents and humans who think like them.**
 >
-> Human devs already have `gw`, `blade`, and IDE tooling. This CLI exists so an AI agent can drive every common Liferay workflow from a **single working directory** — the portal root — with no `cd`, no interactive prompts, and no arcane flags.
+> AI agents need every workflow runnable from one directory with no prompts and no flag soup. It turns out plenty of human developers want the same thing — driving `gw`, `blade`, the bundled Tomcat, and a per-worktree DB stack from the portal root, with no `cd` and no ceremony. Use it however suits you.
 
-## Agent Invariants
+## Invariants
 
 Every command in this CLI upholds three guarantees:
 
