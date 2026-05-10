@@ -49,7 +49,8 @@ func init() {
 
 func Execute(version string) {
 	rootCmd.Version = version
-	if err := rootCmd.Execute(); err != nil {
-		os.Exit(1)
+	err := rootCmd.Execute()
+	if code := resolveExitCode(err); code != ExitOK {
+		os.Exit(code)
 	}
 }
