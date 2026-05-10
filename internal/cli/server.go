@@ -2,6 +2,7 @@ package cli
 
 import (
 	"fmt"
+	"io"
 	"os"
 
 	"github.com/david-truong/liferay-portal-cli/internal/docker"
@@ -76,12 +77,16 @@ var serverWipeCmd = &cobra.Command{
 	RunE:  runServerWipe,
 }
 
-var serverDebug bool
+var (
+	serverDebug   bool
+	serverWipeYes bool
+)
 
 func init() {
 	serverStartCmd.Flags().BoolVar(&serverDebug, "debug", false, "Start Tomcat with JDWP enabled (catalina.sh jpda start). JPDA_ADDRESS comes from setenv.sh — default 8000, per-slot for slot > 0.")
 	serverRunCmd.Flags().BoolVar(&serverDebug, "debug", false, "Run Tomcat in foreground with JDWP enabled (catalina.sh jpda run).")
 	serverRestartCmd.Flags().BoolVar(&serverDebug, "debug", false, "Restart with JDWP enabled.")
+	serverWipeCmd.Flags().BoolVar(&serverWipeYes, "yes", false, "Skip the confirmation prompt. Required when stdin is not a TTY (or set LIFERAY_CLI_ASSUME_YES=1).")
 	serverCmd.AddCommand(
 		serverStartCmd, serverStopCmd, serverRestartCmd, serverRunCmd,
 		serverStatusCmd, serverLogsCmd, serverWipeCmd,
@@ -189,6 +194,20 @@ func runServerLogs(_ *cobra.Command, _ []string) error {
 }
 
 func runServerWipe(_ *cobra.Command, _ []string) error {
+	return wipeServer(serverWipeYes, os.Stdin, os.Stdout, isStdinTTY())
+}
+
+// wipeServer is the testable core. The confirmation gate runs first so a
+// declined wipe never touches the filesystem.
+func wipeServer(assumeYes bool, in io.Reader, out io.Writer, isTTY bool) error {
+	if !confirmWithIO(
+		"This will delete data/, logs/, osgi/state/, work/, and portal-setup-wizard.properties from the active bundle.",
+		assumeYes, in, out, isTTY,
+	) {
+		return ExitErr(ExitConfirmationDeclined,
+			"server wipe declined — pass --yes or set %s=1 to skip the prompt", AssumeYesEnvVar)
+	}
+
 	paths, err := resolvePaths()
 	if err != nil {
 		return err

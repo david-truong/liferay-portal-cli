@@ -2,6 +2,7 @@ package cli
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"os/user"
@@ -58,10 +59,14 @@ var worktreeListCmd = &cobra.Command{
 	},
 }
 
-var worktreeSkipBuild bool
+var (
+	worktreeSkipBuild bool
+	worktreeRemoveYes bool
+)
 
 func init() {
 	worktreeAddCmd.Flags().BoolVar(&worktreeSkipBuild, "skip-build", false, "Skip running 'liferay build' (ant all) after creating the worktree")
+	worktreeRemoveCmd.Flags().BoolVar(&worktreeRemoveYes, "yes", false, "Skip the confirmation prompt. Required when stdin is not a TTY (or set LIFERAY_CLI_ASSUME_YES=1).")
 	worktreeCmd.AddCommand(worktreeAddCmd, worktreeRemoveCmd, worktreeListCmd)
 	rootCmd.AddCommand(worktreeCmd)
 }
@@ -242,6 +247,20 @@ func runWorktreeRemove(cmd *cobra.Command, args []string) error {
 	absTarget, err := filepath.Abs(args[0])
 	if err != nil {
 		return err
+	}
+	return removeWorktree(absTarget, worktreeRemoveYes, os.Stdin, os.Stdout, isStdinTTY())
+}
+
+// removeWorktree is the testable core of "liferay worktree remove". The
+// confirmation gate runs first so a declined remove never invokes git or
+// touches the bundle directory.
+func removeWorktree(absTarget string, assumeYes bool, in io.Reader, out io.Writer, isTTY bool) error {
+	if !confirmWithIO(
+		fmt.Sprintf("This will remove the git worktree at %s along with its bundles/ and CLI state directories.", absTarget),
+		assumeYes, in, out, isTTY,
+	) {
+		return ExitErr(ExitConfirmationDeclined,
+			"worktree remove declined — pass --yes or set %s=1 to skip the prompt", AssumeYesEnvVar)
 	}
 
 	stateDir := state.Dir(absTarget)
