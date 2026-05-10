@@ -13,6 +13,8 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/david-truong/liferay-portal-cli/internal/state"
 )
 
 // Options configures a single Run invocation.
@@ -25,8 +27,9 @@ type Options struct {
 	// TailLines is the number of trailing log lines to print on failure when
 	// not running verbose. Zero means use the default (120).
 	TailLines int
-	// WorktreeRoot, when non-empty, places logs under
-	// <root>/.liferay-cli/logs/. Empty falls back to os.TempDir().
+	// WorktreeRoot, when non-empty, places logs under the worktree's CLI
+	// state dir (~/.liferay-cli/worktrees/<id>/logs/). Empty falls back to
+	// os.TempDir().
 	WorktreeRoot string
 }
 
@@ -52,10 +55,17 @@ func Run(cmd *exec.Cmd, opts Options) error {
 	}
 	defer logFile.Close()
 
-	displayPath := logPath
 	if opts.WorktreeRoot != "" {
-		if rel, err := filepath.Rel(opts.WorktreeRoot, logPath); err == nil {
-			displayPath = rel
+		_ = state.SaveLastCmd(opts.WorktreeRoot, state.LastCmd{
+			Kind:    state.LastCmdArchive,
+			LogPath: logPath,
+		})
+	}
+
+	displayPath := logPath
+	if home, err := os.UserHomeDir(); err == nil && home != "" {
+		if rel, err := filepath.Rel(home, logPath); err == nil && !strings.HasPrefix(rel, "..") {
+			displayPath = filepath.Join("~", rel)
 		}
 	}
 
@@ -96,7 +106,7 @@ func newLogPath(label, worktreeRoot string) (string, error) {
 
 	dir := os.TempDir()
 	if worktreeRoot != "" {
-		dir = filepath.Join(worktreeRoot, ".liferay-cli", "logs")
+		dir = filepath.Join(state.Dir(worktreeRoot), "logs")
 		if err := os.MkdirAll(dir, 0755); err != nil {
 			return "", fmt.Errorf("creating log dir: %w", err)
 		}

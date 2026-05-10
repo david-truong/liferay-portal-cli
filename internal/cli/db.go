@@ -5,6 +5,7 @@ import (
 
 	"github.com/david-truong/liferay-portal-cli/internal/docker"
 	"github.com/david-truong/liferay-portal-cli/internal/portal"
+	"github.com/david-truong/liferay-portal-cli/internal/state"
 	"github.com/spf13/cobra"
 )
 
@@ -24,20 +25,36 @@ Supported engines:
 The portal's Tomcat runs natively on the host (see "liferay server"). Each
 worktree gets its own data volume and port set so multiple worktrees can run
 in parallel.`,
+	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
+		if err := rootPreSetup(cmd, args); err != nil {
+			return err
+		}
+		worktreeRoot, err := findWorktreeRoot()
+		if err != nil {
+			return nil
+		}
+		_ = state.SaveLastCmd(worktreeRoot, state.LastCmd{
+			Kind:    state.LastCmdDB,
+			Service: "db",
+		})
+		return nil
+	},
 }
 
 var dbEngine string
 
 var dbUpCmd = &cobra.Command{
-	Use:   "up",
-	Short: "Start the database stack (or configure hypersonic)",
-	RunE:  runDBUp,
+	Use:     "start",
+	Aliases: []string{"up"},
+	Short:   "Start the database stack (or configure hypersonic)",
+	RunE:    runDBUp,
 }
 
 var dbDownCmd = &cobra.Command{
-	Use:   "down",
-	Short: "Stop the database stack and discard data",
-	RunE:  runDBDown,
+	Use:     "stop",
+	Aliases: []string{"down"},
+	Short:   "Stop the database stack and discard data",
+	RunE:    runDBDown,
 }
 
 var dbRestartCmd = &cobra.Command{
@@ -67,6 +84,10 @@ var dbLogsCmd = &cobra.Command{
 		if len(args) > 0 {
 			service = args[0]
 		}
+		_ = state.SaveLastCmd(worktreeRoot, state.LastCmd{
+			Kind:    state.LastCmdDB,
+			Service: service,
+		})
 		return docker.Run(worktreeRoot, "logs", "-f", service)
 	},
 }
@@ -95,6 +116,10 @@ func init() {
 func runDBUp(_ *cobra.Command, _ []string) error {
 	worktreeRoot, err := findWorktreeRoot()
 	if err != nil {
+		return err
+	}
+
+	if err := checkStockPorts(worktreeRoot); err != nil {
 		return err
 	}
 

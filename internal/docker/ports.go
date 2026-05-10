@@ -54,7 +54,7 @@ const (
 func AllocatePorts() Ports {
 	for slot := 0; slot < 100; slot++ {
 		p := slotPorts(slot)
-		if !anyPortInUse(allProbePorts(p)...) {
+		if !AnyPortInUse(ProbePorts(p)...) {
 			return p
 		}
 	}
@@ -91,10 +91,10 @@ func slotPorts(slot int) Ports {
 	}
 }
 
-// allProbePorts returns every port AllocatePorts should probe for conflicts.
+// ProbePorts returns every port AllocatePorts should probe for conflicts.
 // ES transport is skipped — sidecar ES picks it at startup, so we don't need
 // to reserve it up front.
-func allProbePorts(p Ports) []int {
+func ProbePorts(p Ports) []int {
 	return []int{
 		p.TomcatHTTP, p.TomcatShutdown, p.TomcatRedirect, p.JPDA,
 		p.OSGiConsole, p.ESHTTP, p.Glowroot,
@@ -102,7 +102,7 @@ func allProbePorts(p Ports) []int {
 	}
 }
 
-func anyPortInUse(ports ...int) bool {
+func AnyPortInUse(ports ...int) bool {
 	for _, port := range ports {
 		if isPortInUse(port) {
 			return true

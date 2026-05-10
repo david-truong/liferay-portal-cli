@@ -193,34 +193,36 @@ This runs `git worktree add`, then:
 - Copies `build.*.properties`, `test.*.properties`, `release.*.properties`
 - Generates `app.server.<user>.properties` pointing bundles inside the worktree
 
-Optionally build the bundle immediately:
+By default this also runs `ant all` to populate the bundle. To skip the build:
 
 ```sh
-liferay worktree add LPD-99999 ../LPD-99999 --build
+liferay worktree add LPD-99999 ../LPD-99999 --skip-build
 ```
 
 Other worktree commands:
 
 ```sh
 liferay worktree list
-liferay worktree remove ../LPD-99999   # also removes .liferay-cli/ and bundles/
+liferay worktree remove ../LPD-99999   # also removes ~/.liferay-cli/worktrees/<id>/ and bundles/
 ```
 
 ### `liferay db`
 
-Per-worktree database container + Adminer in Docker. Tomcat is **not** in the container — it runs natively (see `liferay server`). `db up` allocates a slot, starts the chosen engine, and rewrites the bundle's `portal-ext.properties` so the host-native Tomcat can reach the DB on `localhost:<slot-DB>`.
+Per-worktree database container + Adminer in Docker. Tomcat is **not** in the container — it runs natively (see `liferay server`). `db start` allocates a slot, starts the chosen engine, and rewrites the bundle's `portal-ext.properties` so the host-native Tomcat can reach the DB on `localhost:<slot-DB>`.
 
 ```sh
-liferay db up                       # reuses stored engine (default: mysql)
-liferay db up --engine mariadb
-liferay db up --engine postgres
-liferay db up --engine hypersonic   # no container; strips CLI jdbc overrides
+liferay db start                       # reuses stored engine (default: mysql)
+liferay db start --engine mariadb
+liferay db start --engine postgres
+liferay db start --engine hypersonic   # no container; strips CLI jdbc overrides
 liferay db logs           # tail DB logs
 liferay db logs adminer   # tail Adminer
 liferay db ps
-liferay db down           # stops containers; data is not persisted
+liferay db stop           # stops containers; data is not persisted
 liferay db restart
 ```
+
+`up`/`down` are accepted as aliases for `start`/`stop`.
 
 **Supported engines**
 
@@ -231,7 +233,7 @@ liferay db restart
 | postgres   | `postgres:17` | `org.postgresql.Driver`, `jdbc:postgresql://…/lportal`       |
 | hypersonic | none          | no override; Liferay falls back to its built-in HSQL         |
 
-The engine is persisted in `.liferay-cli/docker/ports.json`. `db down`, `db logs`, and `db ps` are no-ops (with a message) when the stored engine is hypersonic.
+The engine is persisted in `~/.liferay-cli/worktrees/<id>/docker/ports.json`. `db stop`, `db logs`, and `db ps` are no-ops (with a message) when the stored engine is hypersonic.
 
 JDBC drivers for mysql, mariadb, postgres, and hsql already ship in `tomcat-*/webapps/ROOT/WEB-INF/shielded-container-lib/`, so no manual driver install is needed for the supported engines.
 
@@ -241,7 +243,7 @@ Requires Docker Desktop (macOS/Windows) or Docker Engine (Linux) for the non-hyp
 
 Each worktree claims a **slot** the first time its DB stack comes up. Slots are allocated sequentially (0, 1, 2, …) by probing for free ports; the first worktree on a host claims slot 0 and runs with **stock** Liferay configuration (no bundle edits, standard ports). Subsequent worktrees claim slot > 0 and get a coordinated port offset plus a bundle patch that rewires the server-side ports.
 
-Slot is persisted in `.liferay-cli/docker/ports.json`. Docker stacks use `-p liferay-slot-<N>` as the compose project name so two worktrees never fight for container names.
+Slot is persisted in `~/.liferay-cli/worktrees/<id>/docker/ports.json`. Docker stacks use `-p liferay-slot-<N>` as the compose project name so two worktrees never fight for container names.
 
 **Per-slot ports**
 
@@ -279,9 +281,9 @@ Slot > 0 also gets `liferay.home=<bundleDir>`, `portal.instance.http.socket.addr
 
 ### `liferay server`
 
-Host-native Tomcat lifecycle. Wraps `catalina.sh` with `CATALINA_PID` pointing at `<bundle>/.liferay-cli/tomcat.pid` so start/stop/status stay consistent.
+Host-native Tomcat lifecycle. Wraps `catalina.sh` with `CATALINA_PID` pointing at `~/.liferay-cli/worktrees/<id>/tomcat.pid` so start/stop/status stay consistent (and survive `ant all`).
 
-`start` and `run` automatically bring up the DB stack for the worktree's stored engine (equivalent to `liferay db up`), apply the slot-specific bundle patches (if slot > 0), and wait for the DB healthcheck before launching Tomcat. For hypersonic, the Docker step is skipped; the patcher still runs for slot > 0.
+`start` and `run` automatically bring up the DB stack for the worktree's stored engine (equivalent to `liferay db start`), apply the slot-specific bundle patches (if slot > 0), and wait for the DB healthcheck before launching Tomcat. For hypersonic, the Docker step is skipped; the patcher still runs for slot > 0.
 
 ```sh
 liferay server start             # background (catalina.sh start)

@@ -12,6 +12,7 @@ import (
 	"syscall"
 
 	"github.com/david-truong/liferay-portal-cli/internal/portal"
+	"github.com/david-truong/liferay-portal-cli/internal/state"
 )
 
 // Paths groups the filesystem locations liferay-cli cares about for a given bundle.
@@ -20,7 +21,7 @@ type Paths struct {
 	Tomcat    string // bundleDir/tomcat-*
 	Bin       string // tomcat/bin
 	CatalinaS string // tomcat/bin/catalina.sh (or catalina.bat on Windows)
-	PidFile   string // bundleDir/.liferay-cli/tomcat.pid
+	PidFile   string // <state-dir>/tomcat.pid (under ~/.liferay-cli/)
 	CatOut    string // tomcat/logs/catalina.out
 }
 
@@ -38,7 +39,7 @@ func Resolve(portalRoot, bundleDir string) (Paths, error) {
 		script = "catalina.bat"
 	}
 
-	pidDir := filepath.Join(bundleDir, ".liferay-cli")
+	pidDir := state.Dir(portalRoot)
 	if err := os.MkdirAll(pidDir, 0755); err != nil {
 		return Paths{}, fmt.Errorf("creating %s: %w", pidDir, err)
 	}

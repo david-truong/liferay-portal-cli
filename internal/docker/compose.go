@@ -8,6 +8,8 @@ import (
 	"path/filepath"
 	"strings"
 	"text/template"
+
+	"github.com/david-truong/liferay-portal-cli/internal/state"
 )
 
 // Engine names recognized by the CLI. Hypersonic means "no Docker container; use
@@ -216,9 +218,11 @@ type State struct {
 	Engine string `json:"engine,omitempty"`
 }
 
-// StateDir returns the path to the per-worktree CLI state directory.
+// StateDir returns the path to the per-worktree CLI state directory. State
+// lives outside the worktree (under ~/.liferay-cli/) so "ant all" cannot wipe
+// it.
 func StateDir(worktreeRoot string) string {
-	return filepath.Join(worktreeRoot, ".liferay-cli", "docker")
+	return filepath.Join(state.Dir(worktreeRoot), "docker")
 }
 
 // Setup reads/writes the state file, generates docker-compose.yml for Docker-
@@ -307,7 +311,7 @@ func Run(worktreeRoot string, args ...string) error {
 	}
 	state, ok := LoadState(worktreeRoot)
 	if !ok {
-		return fmt.Errorf("no Docker state for this worktree — run \"liferay db up\" first")
+		return fmt.Errorf("no Docker state for this worktree — run \"liferay db start\" first")
 	}
 	composePath := ComposePath(worktreeRoot)
 	cmdArgs := append([]string{"compose", "-p", projectName(state.Slot), "-f", composePath}, args...)

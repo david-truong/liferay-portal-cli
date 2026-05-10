@@ -10,6 +10,7 @@ import (
 
 	"github.com/david-truong/liferay-portal-cli/internal/fsutil"
 	"github.com/david-truong/liferay-portal-cli/internal/portal"
+	"github.com/david-truong/liferay-portal-cli/internal/state"
 	"github.com/spf13/cobra"
 )
 
@@ -35,9 +36,9 @@ required for Liferay development:
     app.server.<user>.properties       — points bundles/ inside the worktree
     bundles/portal-setup-wizard.properties — skips setup wizard on first boot
 
-The worktree's bundle directory is left empty (apart from the setup-wizard
-properties); run "ant all" or "liferay build" to populate it before using
-"liferay server up".`,
+By default, runs "ant all" after creating the worktree to populate the bundle
+directory. Pass --skip-build to skip this step (you'll need to run
+"liferay build" manually before "liferay server up").`,
 	Args: cobra.ExactArgs(2),
 	RunE: runWorktreeAdd,
 }
@@ -57,10 +58,10 @@ var worktreeListCmd = &cobra.Command{
 	},
 }
 
-var worktreeBuild bool
+var worktreeSkipBuild bool
 
 func init() {
-	worktreeAddCmd.Flags().BoolVar(&worktreeBuild, "build", false, "Run 'liferay build' (ant all) after creating the worktree")
+	worktreeAddCmd.Flags().BoolVar(&worktreeSkipBuild, "skip-build", false, "Skip running 'liferay build' (ant all) after creating the worktree")
 	worktreeCmd.AddCommand(worktreeAddCmd, worktreeRemoveCmd, worktreeListCmd)
 	rootCmd.AddCommand(worktreeCmd)
 }
@@ -74,7 +75,7 @@ func runWorktreeAdd(cmd *cobra.Command, args []string) error {
 	}
 
 	// Find the primary checkout (the common git dir's worktree)
-	primaryRoot, err := gitPrimaryRoot()
+	primaryRoot, err := gitPrimaryRoot("")
 	if err != nil {
 		return err
 	}
@@ -94,51 +95,53 @@ func runWorktreeAdd(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	if worktreeBuild {
-		fmt.Println("\nRunning liferay build (ant all) ...")
-		return runAntAll(absTarget)
+	if worktreeSkipBuild {
+		fmt.Printf("\nNext: cd %s && ant all   (populates the bundle)\n", absTarget)
+		fmt.Println("Then: liferay server up   (starts Tomcat + MySQL)")
+		return nil
 	}
-	return nil
+	fmt.Println("\nRunning liferay build (ant all) ...")
+	return runAntAll(absTarget)
 }
 
-func propagatePortalFiles(primaryRoot, worktreeRoot string) error {
+// fixAction records what ensureWorktreeFiles did (or didn't do) for one file.
+type fixAction struct {
+	name   string
+	action string // "linked", "copied", "generated", "skipped", "failed"
+	note   string
+}
+
+// ensureWorktreeFiles is the shared engine behind both "liferay worktree add"
+// and the auto-fix that runs on every command. It propagates user-local files
+// from primaryRoot into worktreeRoot and generates per-worktree config that
+// upstream git ignores. Idempotent — files that already exist get an action
+// of "skipped".
+func ensureWorktreeFiles(primaryRoot, worktreeRoot string) []fixAction {
 	u, err := user.Current()
 	if err != nil {
-		return fmt.Errorf("getting current user: %w", err)
+		return []fixAction{{name: "current-user", action: "failed", note: err.Error()}}
 	}
 
-	type result struct {
-		name   string
-		action string
-		note   string
-	}
-	var results []result
+	var results []fixAction
 
-	// --- Symlink candidates ---
-	symlinkTargets := collectSymlinkTargets(primaryRoot)
-	for _, target := range symlinkTargets {
+	// Symlink candidates (CLAUDE.md, .claude/, .idea/, etc.)
+	for _, target := range collectSymlinkTargets(primaryRoot) {
 		src := filepath.Join(primaryRoot, target)
-		if !fsutil.Exists(src) {
-			continue
-		}
 		dst := filepath.Join(worktreeRoot, target)
 		if fsutil.Exists(dst) {
-			results = append(results, result{target, "skipped", "already exists"})
+			results = append(results, fixAction{target, "skipped", "already exists"})
 			continue
 		}
 		action, note, err := fsutil.SymlinkOrCopy(src, dst)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "warning: could not propagate %s: %v\n", target, err)
+			results = append(results, fixAction{target, "failed", err.Error()})
 			continue
 		}
-		results = append(results, result{target, action, note})
+		results = append(results, fixAction{target, action, note})
 	}
 
-	// --- Copy candidates ---
-	copyPatterns := []struct {
-		glob    string
-		tracked string // filename of the tracked version to exclude
-	}{
+	// Copy candidates: build.*.properties / test.*.properties / release.*.properties
+	copyPatterns := []struct{ glob, tracked string }{
 		{"build.*.properties", "build.properties"},
 		{"test.*.properties", "test.properties"},
 		{"release.*.properties", "release.properties"},
@@ -152,65 +155,84 @@ func propagatePortalFiles(primaryRoot, worktreeRoot string) error {
 			}
 			dst := filepath.Join(worktreeRoot, base)
 			if fsutil.Exists(dst) {
-				results = append(results, result{base, "skipped", "already exists"})
+				results = append(results, fixAction{base, "skipped", "already exists"})
 				continue
 			}
 			if err := fsutil.CopyFile(src, dst); err != nil {
-				fmt.Fprintf(os.Stderr, "warning: could not copy %s: %v\n", base, err)
+				results = append(results, fixAction{base, "failed", err.Error()})
 				continue
 			}
-			results = append(results, result{base, "copied", ""})
+			results = append(results, fixAction{base, "copied", ""})
 		}
 	}
 
-	// .env at root
+	// .env
 	if envSrc := filepath.Join(primaryRoot, ".env"); fsutil.Exists(envSrc) {
 		envDst := filepath.Join(worktreeRoot, ".env")
-		if fsutil.Exists(envDst) {
-			results = append(results, result{".env", "skipped", "already exists"})
-		} else if err := fsutil.CopyFile(envSrc, envDst); err == nil {
-			results = append(results, result{".env", "copied", ""})
+		switch {
+		case fsutil.Exists(envDst):
+			results = append(results, fixAction{".env", "skipped", "already exists"})
+		default:
+			if err := fsutil.CopyFile(envSrc, envDst); err != nil {
+				results = append(results, fixAction{".env", "failed", err.Error()})
+			} else {
+				results = append(results, fixAction{".env", "copied", ""})
+			}
 		}
 	}
 
-	// --- Generate app.server.<user>.properties ---
+	// app.server.<user>.properties
 	appServerFile := fmt.Sprintf("app.server.%s.properties", u.Username)
 	appServerDst := filepath.Join(worktreeRoot, appServerFile)
 	if fsutil.Exists(appServerDst) {
-		results = append(results, result{appServerFile, "skipped", "already exists — worktree will use existing server config"})
+		results = append(results, fixAction{appServerFile, "skipped", "already exists — worktree will use existing server config"})
 	} else {
 		content := "app.server.parent.dir=${project.dir}/bundles\n"
 		if err := os.WriteFile(appServerDst, []byte(content), 0644); err != nil {
-			fmt.Fprintf(os.Stderr, "warning: could not write %s: %v\n", appServerFile, err)
+			results = append(results, fixAction{appServerFile, "failed", err.Error()})
 		} else {
-			results = append(results, result{appServerFile, "generated", "bundles/ will be inside this worktree"})
+			results = append(results, fixAction{appServerFile, "generated", "bundles/ will be inside this worktree"})
 		}
 	}
 
-	// --- Generate bundles/portal-setup-wizard.properties ---
+	// bundles/portal-setup-wizard.properties
 	setupWizardRel := filepath.Join("bundles", "portal-setup-wizard.properties")
 	setupWizardDst := filepath.Join(worktreeRoot, setupWizardRel)
-	if fsutil.Exists(setupWizardDst) {
-		results = append(results, result{setupWizardRel, "skipped", "already exists"})
-	} else if err := os.MkdirAll(filepath.Dir(setupWizardDst), 0755); err != nil {
-		fmt.Fprintf(os.Stderr, "warning: could not create bundles/: %v\n", err)
-	} else {
-		content := "admin.email.from.address=test@liferay.com\n" +
-			"admin.email.from.name=Test Test\n" +
-			"company.default.locale=en_US\n" +
-			"company.default.time.zone=UTC\n" +
-			"company.default.web.id=liferay.com\n" +
-			"default.admin.email.address.prefix=test\n" +
-			"liferay.home=" + filepath.Join(worktreeRoot, "bundles") + "\n" +
-			"setup.wizard.enabled=false\n"
-		if err := os.WriteFile(setupWizardDst, []byte(content), 0644); err != nil {
-			fmt.Fprintf(os.Stderr, "warning: could not write %s: %v\n", setupWizardRel, err)
+	switch {
+	case fsutil.Exists(setupWizardDst):
+		results = append(results, fixAction{setupWizardRel, "skipped", "already exists"})
+	default:
+		if err := os.MkdirAll(filepath.Dir(setupWizardDst), 0755); err != nil {
+			results = append(results, fixAction{setupWizardRel, "failed", err.Error()})
 		} else {
-			results = append(results, result{setupWizardRel, "generated", "skips setup wizard on first boot"})
+			content := "admin.email.from.address=test@liferay.com\n" +
+				"admin.email.from.name=Test Test\n" +
+				"company.default.locale=en_US\n" +
+				"company.default.time.zone=UTC\n" +
+				"company.default.web.id=liferay.com\n" +
+				"default.admin.email.address.prefix=test\n" +
+				"liferay.home=" + filepath.Join(worktreeRoot, "bundles") + "\n" +
+				"setup.wizard.enabled=false\n"
+			if err := os.WriteFile(setupWizardDst, []byte(content), 0644); err != nil {
+				results = append(results, fixAction{setupWizardRel, "failed", err.Error()})
+			} else {
+				results = append(results, fixAction{setupWizardRel, "generated", "skips setup wizard on first boot"})
+			}
 		}
 	}
 
-	// Print summary
+	return results
+}
+
+func propagatePortalFiles(primaryRoot, worktreeRoot string) error {
+	results := ensureWorktreeFiles(primaryRoot, worktreeRoot)
+
+	for _, r := range results {
+		if r.action == "failed" {
+			fmt.Fprintf(os.Stderr, "warning: could not propagate %s: %s\n", r.name, r.note)
+		}
+	}
+
 	fmt.Printf("\nWorktree created at %s\n\n", worktreeRoot)
 	maxName := 0
 	for _, r := range results {
@@ -225,8 +247,6 @@ func propagatePortalFiles(primaryRoot, worktreeRoot string) error {
 		}
 		fmt.Println(line)
 	}
-	fmt.Printf("\nNext: cd %s && ant all   (populates the bundle)\n", worktreeRoot)
-	fmt.Println("Then: liferay server up   (starts Tomcat + MySQL)")
 	return nil
 }
 
@@ -236,7 +256,7 @@ func runWorktreeRemove(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	stateDir := filepath.Join(absTarget, ".liferay-cli")
+	stateDir := state.Dir(absTarget)
 	bundleDir := filepath.Join(absTarget, "bundles")
 
 	if err := gitRun("worktree", "remove", absTarget); err != nil {
@@ -256,17 +276,24 @@ func runWorktreeRemove(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-func gitPrimaryRoot() (string, error) {
-	// Find the common git dir (works inside worktrees too)
-	out, err := gitOutput("rev-parse", "--git-common-dir")
+// gitPrimaryRoot returns the primary worktree root (the directory whose
+// .git is the common dir, not a "gitdir:" file). dir scopes the git
+// invocation; pass "" to inherit the current process working directory.
+func gitPrimaryRoot(dir string) (string, error) {
+	args := []string{}
+	if dir != "" {
+		args = append(args, "-C", dir)
+	}
+	args = append(args, "rev-parse", "--git-common-dir")
+	out, err := gitOutput(args...)
 	if err != nil {
 		return "", fmt.Errorf("not inside a git repository")
 	}
 	commonDir := strings.TrimSpace(out)
-	// --git-common-dir returns the .git dir of the primary worktree
-	// The primary root is its parent (unless it's a bare repo)
+	if !filepath.IsAbs(commonDir) && dir != "" {
+		commonDir = filepath.Join(dir, commonDir)
+	}
 	primaryRoot := filepath.Dir(commonDir)
-	// Canonicalise (resolve any symlinks)
 	if abs, err := filepath.Abs(primaryRoot); err == nil {
 		primaryRoot = abs
 	}

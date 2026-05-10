@@ -7,6 +7,7 @@ import (
 
 	"github.com/david-truong/liferay-portal-cli/internal/docker"
 	"github.com/david-truong/liferay-portal-cli/internal/portal"
+	"github.com/david-truong/liferay-portal-cli/internal/state"
 	"github.com/david-truong/liferay-portal-cli/internal/tomcat"
 	"github.com/spf13/cobra"
 )
@@ -18,11 +19,29 @@ var serverCmd = &cobra.Command{
 	Long: `Starts, stops, and inspects the Liferay Tomcat bundle on the host.
 
 Runs catalina.sh directly under the bundle's tomcat-*/bin directory, with
-CATALINA_PID set to <bundle>/.liferay-cli/tomcat.pid so start/stop/status
-stay consistent across invocations.
+CATALINA_PID set to ~/.liferay-cli/worktrees/<id>/tomcat.pid so start/stop/
+status stay consistent across invocations and survive "ant all".
 
 MySQL runs in Docker — see "liferay db". "server start" and "server run"
 will bring up the db stack automatically if it isn't already running.`,
+	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
+		if err := rootPreSetup(cmd, args); err != nil {
+			return err
+		}
+		worktreeRoot, err := findWorktreeRoot()
+		if err != nil {
+			return nil
+		}
+		paths, err := resolvePaths()
+		if err != nil {
+			return nil
+		}
+		_ = state.SaveLastCmd(worktreeRoot, state.LastCmd{
+			Kind:    state.LastCmdServer,
+			LogPath: paths.CatOut,
+		})
+		return nil
+	},
 }
 
 var serverStartCmd = &cobra.Command{
@@ -92,6 +111,10 @@ func runServerStart(_ *cobra.Command, _ []string) error {
 	if err != nil {
 		return err
 	}
+	if pid, alive := tomcat.Status(paths); alive {
+		fmt.Printf("Tomcat already running (pid %d)\n", pid)
+		return nil
+	}
 	_, ports, err := ensureDB(paths.Bundle)
 	if err != nil {
 		return err
@@ -130,6 +153,9 @@ func runServerRun(_ *cobra.Command, _ []string) error {
 	if err != nil {
 		return err
 	}
+	if pid, alive := tomcat.Status(paths); alive {
+		return fmt.Errorf("tomcat already running (pid %d) — stop it first", pid)
+	}
 	_, ports, err := ensureDB(paths.Bundle)
 	if err != nil {
 		return err
@@ -137,6 +163,7 @@ func runServerRun(_ *cobra.Command, _ []string) error {
 	if err := tomcat.PatchBundle(paths, ports); err != nil {
 		return fmt.Errorf("patching bundle for slot %d: %w", ports.Slot, err)
 	}
+	printServerBanner(paths, ports, serverDebug)
 	return tomcat.Start(paths, tomcat.StartOptions{Foreground: true, Debug: serverDebug})
 }
 
@@ -192,15 +219,12 @@ func runServerWipe(_ *cobra.Command, _ []string) error {
 	return nil
 }
 
-// ensureDB makes sure the per-worktree database stack is running before Tomcat
-// tries to connect. Safe to call every start — docker.Setup only rewrites
-// CLI-managed keys in portal-ext.properties, and "compose up -d --wait" is a
-// no-op for already-healthy containers. Hypersonic and other non-Docker engines
-// skip the container step entirely. Returns the resolved State and Ports so
-// the caller can use the slot for banner/patching.
 func ensureDB(bundleDir string) (docker.State, docker.Ports, error) {
 	worktreeRoot, err := findWorktreeRoot()
 	if err != nil {
+		return docker.State{}, docker.Ports{}, err
+	}
+	if err := checkStockPorts(worktreeRoot); err != nil {
 		return docker.State{}, docker.Ports{}, err
 	}
 	state, ports, err := docker.Setup(worktreeRoot, bundleDir, "")
@@ -243,11 +267,3 @@ func currentStatus() (int, bool) {
 	return tomcat.Status(paths)
 }
 
-// findWorktreeRoot finds the worktree root (portal root) from cwd.
-func findWorktreeRoot() (string, error) {
-	cwd, err := os.Getwd()
-	if err != nil {
-		return "", err
-	}
-	return portal.FindRoot(cwd)
-}

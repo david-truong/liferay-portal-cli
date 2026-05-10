@@ -9,6 +9,7 @@ import (
 	"github.com/david-truong/liferay-portal-cli/internal/gradle"
 	"github.com/david-truong/liferay-portal-cli/internal/logrun"
 	"github.com/david-truong/liferay-portal-cli/internal/portal"
+	"github.com/david-truong/liferay-portal-cli/internal/state"
 	"github.com/spf13/cobra"
 )
 
@@ -83,21 +84,21 @@ func runTestIntegration(cmd *cobra.Command, args []string) error {
 	return logrun.Run(gwCmd, logrun.Options{Label: "test-integration-" + filepath.Base(modulePath), Verbose: verbose, WorktreeRoot: portalRoot})
 }
 
-// writeSlotInitScript writes .liferay-cli/gradle/test-integration-init.gradle
+// writeSlotInitScript writes <state-dir>/gradle/test-integration-init.gradle
 // if the worktree has a non-stock slot assigned, and returns its path. For
 // slot 0 (or when no state exists yet) it returns "" so the caller skips the
 // -I flag and behaves as a straight pass-through.
 func writeSlotInitScript(portalRoot string) (string, error) {
-	state, ok := docker.LoadState(portalRoot)
+	ds, ok := docker.LoadState(portalRoot)
 	if !ok {
 		return "", nil
 	}
-	ports := docker.PortsFromSlot(state.Slot)
+	ports := docker.PortsFromSlot(ds.Slot)
 	if ports.IsStock() {
 		return "", nil
 	}
 
-	gradleDir := filepath.Join(portalRoot, ".liferay-cli", "gradle")
+	gradleDir := filepath.Join(state.Dir(portalRoot), "gradle")
 	if err := os.MkdirAll(gradleDir, 0755); err != nil {
 		return "", err
 	}
