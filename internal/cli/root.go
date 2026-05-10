@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/david-truong/liferay-portal-cli/internal/portal"
 	"github.com/spf13/cobra"
 )
 
@@ -27,20 +26,13 @@ gw, blade, and their IDE.`,
 
 // rootPreSetup performs the workspace bootstrapping every liferay invocation
 // expects: honor -C/--directory, then auto-fix any missing per-worktree files.
-// Subcommand groups that define their own PersistentPreRunE (server, db) MUST
-// call this first — cobra picks the most-specific PersistentPreRunE only, so
-// without an explicit call the parent's hook is silently shadowed.
 func rootPreSetup(_ *cobra.Command, _ []string) error {
 	if workingDir != "" {
 		if err := os.Chdir(workingDir); err != nil {
 			return fmt.Errorf("change directory to %s: %w", workingDir, err)
 		}
 	}
-	cwd, err := os.Getwd()
-	if err != nil {
-		return nil
-	}
-	portalRoot, err := portal.FindRoot(cwd)
+	portalRoot, err := findWorktreeRoot()
 	if err != nil {
 		return nil
 	}

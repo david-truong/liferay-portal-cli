@@ -314,7 +314,7 @@ func Run(worktreeRoot string, args ...string) error {
 		return fmt.Errorf("no Docker state for this worktree — run \"liferay db start\" first")
 	}
 	composePath := ComposePath(worktreeRoot)
-	cmdArgs := append([]string{"compose", "-p", projectName(state.Slot), "-f", composePath}, args...)
+	cmdArgs := append([]string{"compose", "-p", ProjectName(state.Slot), "-f", composePath}, args...)
 	cmd := exec.Command("docker", cmdArgs...)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
@@ -322,9 +322,9 @@ func Run(worktreeRoot string, args ...string) error {
 	return cmd.Run()
 }
 
-// projectName is the docker compose -p value derived from a slot.
+// ProjectName is the docker compose -p value derived from a slot.
 // Keeps container names human-readable (e.g. "liferay-slot-0-db-1").
-func projectName(slot int) string {
+func ProjectName(slot int) string {
 	return fmt.Sprintf("liferay-slot-%d", slot)
 }
 

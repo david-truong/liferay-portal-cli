@@ -25,7 +25,6 @@ Supported engines:
 The portal's Tomcat runs natively on the host (see "liferay server"). Each
 worktree gets its own data volume and port set so multiple worktrees can run
 in parallel.`,
-	PersistentPreRunE: rootPreSetup,
 }
 
 var dbEngine string
@@ -157,12 +156,9 @@ func runDBDown(_ *cobra.Command, _ []string) error {
 	if err != nil {
 		return err
 	}
-
-	dockerState, ok := docker.LoadState(worktreeRoot)
-	if !ok || !docker.IsDockerManagedEngine(dockerState.Engine) {
+	if requireDockerEngine(worktreeRoot) != nil {
 		fmt.Printf("No Docker-managed database for this worktree; nothing to stop.\n")
 		return nil
 	}
-
 	return docker.Run(worktreeRoot, "down")
 }

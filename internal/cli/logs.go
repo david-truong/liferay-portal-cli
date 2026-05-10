@@ -106,12 +106,6 @@ func showArchive(path string, grepRE *regexp.Regexp, tail int) error {
 }
 
 func tailServer(catOut string, grepRE *regexp.Regexp, tail int) error {
-	if catOut == "" {
-		return fmt.Errorf("no catalina.out path stored for the last server command")
-	}
-	if _, err := os.Stat(catOut); err != nil {
-		return fmt.Errorf("no catalina.out at %s (server has not been started)", catOut)
-	}
 	announce("server", catOut)
 
 	args := []string{}
@@ -132,7 +126,7 @@ func tailDB(worktreeRoot, service string, grepRE *regexp.Regexp, tail int) error
 
 	composeArgs := []string{
 		"compose",
-		"-p", fmt.Sprintf("liferay-slot-%d", dockerState.Slot),
+		"-p", docker.ProjectName(dockerState.Slot),
 		"-f", docker.ComposePath(worktreeRoot),
 		"logs",
 		"-f",
@@ -214,6 +208,9 @@ func announce(kind, target string) {
 	fmt.Fprintf(os.Stderr, "[logs: %s — %s]\n", kind, state.DisplayHome(target))
 }
 
+// newestLog returns the .log file with the latest filename in logDir.
+// logrun encodes a nanosecond-precision timestamp as the filename prefix,
+// so lexicographic order matches modification-time order.
 func newestLog(logDir string) (string, error) {
 	entries, err := os.ReadDir(logDir)
 	if err != nil {
@@ -223,18 +220,11 @@ func newestLog(logDir string) (string, error) {
 		return "", err
 	}
 	var newest string
-	var newestMod int64
 	for _, e := range entries {
 		if e.IsDir() || !strings.HasSuffix(e.Name(), ".log") {
 			continue
 		}
-		info, err := e.Info()
-		if err != nil {
-			continue
-		}
-		t := info.ModTime().UnixNano()
-		if t > newestMod || (t == newestMod && e.Name() > newest) {
-			newestMod = t
+		if e.Name() > newest {
 			newest = e.Name()
 		}
 	}
