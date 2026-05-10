@@ -1,6 +1,6 @@
 module github.com/david-truong/liferay-portal-cli
 
-go 1.22
+go 1.23
 
 require github.com/spf13/cobra v1.10.2
 
