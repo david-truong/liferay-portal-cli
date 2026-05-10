@@ -23,19 +23,20 @@ status stay consistent across invocations and survive "ant all".
 
 MySQL runs in Docker — see "liferay db". "server start" and "server run"
 will bring up the db stack automatically if it isn't already running.`,
-	PersistentPreRunE: rootPreSetup,
 }
 
 var serverStartCmd = &cobra.Command{
-	Use:   "start",
-	Short: "Start Tomcat in the background",
-	RunE:  runServerStart,
+	Use:     "start",
+	Aliases: []string{"up"},
+	Short:   "Start Tomcat in the background",
+	RunE:    runServerStart,
 }
 
 var serverStopCmd = &cobra.Command{
-	Use:   "stop",
-	Short: "Stop the running Tomcat",
-	RunE:  runServerStop,
+	Use:     "stop",
+	Aliases: []string{"down"},
+	Short:   "Stop the running Tomcat",
+	RunE:    runServerStop,
 }
 
 var serverRestartCmd = &cobra.Command{
