@@ -187,11 +187,29 @@ var portalExtOverrideKeys = map[string]bool{
 	"portal.instance.http.socket.address":      true,
 	"module.framework.properties.osgi.console": true,
 	"browser.launcher.url":                     true,
+	"include-and-override":                     true,
+	"users.reminder.queries.enabled":           true,
+	"terms.of.use.required":                    true,
+	"passwords.default.policy.change.required": true,
 }
+
+// devModeOverrides is emitted unconditionally: turns on developer mode by
+// chaining portal-developer.properties, plus the first-login bypass keys that
+// portal-developer.properties does not set itself. Keeps agent and human dev
+// flows free of reminder-queries, ToS, and forced-password-change prompts.
+const devModeOverrides = "include-and-override=portal-developer.properties\n" +
+	"users.reminder.queries.enabled=false\n" +
+	"terms.of.use.required=false\n" +
+	"passwords.default.policy.change.required=false\n"
 
 // browserLauncherOverride suppresses Liferay's auto-open-browser-on-startup
 // behavior. Always emitted — agent-driven workflows should never pop a window.
 const browserLauncherOverride = "browser.launcher.url=\n"
+
+const (
+	managedBlockBegin = "# Begin liferay-cli portal-ext overrides"
+	managedBlockEnd   = "# End liferay-cli portal-ext overrides"
+)
 
 // slotOverridesStanza returns the non-JDBC key block we inject for slot > 0.
 // For slot 0 (stock) it returns the empty string so the bundle keeps its
@@ -380,8 +398,20 @@ func writePortalExt(bundleDir, engine string, ports Ports) error {
 	var sb strings.Builder
 
 	if data, err := os.ReadFile(path); err == nil {
+		inManagedBlock := false
 		for _, line := range strings.Split(string(data), "\n") {
 			trimmed := strings.TrimSpace(line)
+			if strings.HasPrefix(trimmed, managedBlockBegin) {
+				inManagedBlock = true
+				continue
+			}
+			if strings.HasPrefix(trimmed, managedBlockEnd) {
+				inManagedBlock = false
+				continue
+			}
+			if inManagedBlock {
+				continue
+			}
 			if trimmed == "" || strings.HasPrefix(trimmed, "#") {
 				sb.WriteString(line)
 				sb.WriteByte('\n')
@@ -404,11 +434,12 @@ func writePortalExt(bundleDir, engine string, ports Ports) error {
 	jdbcStanza := portalExtStanza(engine, ports.MySQL)
 	slotStanza := slotOverridesStanza(bundleDir, ports)
 
-	sb.WriteString("# Begin liferay-cli portal-ext overrides — regenerated on each \"liferay db up\". Do not edit.\n")
+	sb.WriteString(managedBlockBegin + " — regenerated on each \"liferay db up\". Do not edit.\n")
+	sb.WriteString(devModeOverrides)
 	sb.WriteString(jdbcStanza)
 	sb.WriteString(slotStanza)
 	sb.WriteString(browserLauncherOverride)
-	sb.WriteString("# End liferay-cli portal-ext overrides.\n")
+	sb.WriteString(managedBlockEnd + ".\n")
 
 	return os.WriteFile(path, []byte(sb.String()), 0644)
 }
