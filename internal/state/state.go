@@ -11,6 +11,18 @@ import (
 	"strings"
 )
 
+// Root returns the host-wide ~/.liferay-cli/ directory that contains every
+// per-worktree subtree plus host-global state (e.g. the slot allocation lock
+// file). Falls back to os.TempDir() when the home directory cannot be
+// resolved; that fallback is documented tech debt — see CHANGELOG.
+func Root() string {
+	home, err := os.UserHomeDir()
+	if err != nil || home == "" {
+		home = os.TempDir()
+	}
+	return filepath.Join(home, ".liferay-cli")
+}
+
 // Dir returns the persistent state directory for the given worktree root.
 // The path is deterministic for a given absolute worktreeRoot; the hash
 // suffix disambiguates worktrees that share a basename.
@@ -19,13 +31,9 @@ func Dir(worktreeRoot string) string {
 	if err != nil {
 		abs = worktreeRoot
 	}
-	home, err := os.UserHomeDir()
-	if err != nil || home == "" {
-		home = os.TempDir()
-	}
 	sum := sha1.Sum([]byte(abs))
 	id := filepath.Base(abs) + "-" + hex.EncodeToString(sum[:4])
-	return filepath.Join(home, ".liferay-cli", "worktrees", id)
+	return filepath.Join(Root(), "worktrees", id)
 }
 
 // WriteFileAtomic writes data to path via a temp file + rename so concurrent

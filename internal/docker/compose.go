@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 	"text/template"
+	"time"
 
 	"github.com/david-truong/liferay-portal-cli/internal/state"
 )
@@ -349,11 +350,24 @@ func ProjectName(slot int) string {
 // loadOrInitState reads ports.json if present, otherwise allocates a new slot.
 // requestedEngine, if non-empty, replaces whatever engine was previously stored.
 // The first call on a fresh worktree defaults the engine to DefaultEngine.
+//
+// The probe-and-persist sequence is serialized by a host-wide flock on
+// ~/.liferay-cli/slot.lock so two worktrees starting in parallel cannot
+// both claim the same slot. Within the critical section we also consult
+// every other worktree's persisted ports.json — that way the second
+// worktree picks slot 1 even if it boots before the first has run
+// `docker compose up` (i.e. before slot 0's host ports are actually bound).
 func loadOrInitState(stateDir, requestedEngine string) (State, error) {
 	if requestedEngine != "" && !IsSupportedEngine(requestedEngine) {
 		return State{}, fmt.Errorf("unsupported engine %q (want one of: %s)",
 			requestedEngine, strings.Join(SupportedEngines, ", "))
 	}
+
+	unlock, err := state.Lock(filepath.Join(state.Root(), "slot.lock"), 30*time.Second)
+	if err != nil {
+		return State{}, fmt.Errorf("acquiring slot lock: %w", err)
+	}
+	defer func() { _ = unlock() }()
 
 	portsFile := filepath.Join(stateDir, "ports.json")
 	var s State
@@ -362,8 +376,8 @@ func loadOrInitState(stateDir, requestedEngine string) (State, error) {
 		_ = json.Unmarshal(data, &s)
 	}
 
-	if s.Slot < 0 || (s.Slot == 0 && !isPersisted(portsFile)) {
-		s.Slot = AllocatePorts().Slot
+	if !isPersisted(portsFile) {
+		s.Slot = allocateFreshSlot(stateDir)
 	}
 	if s.Engine == "" {
 		s.Engine = DefaultEngine
@@ -372,11 +386,66 @@ func loadOrInitState(stateDir, requestedEngine string) (State, error) {
 		s.Engine = requestedEngine
 	}
 
-	data, _ := json.Marshal(s)
+	data, err := json.Marshal(s)
+	if err != nil {
+		return State{}, fmt.Errorf("marshal state: %w", err)
+	}
 	if err := state.WriteFileAtomic(portsFile, data, 0644); err != nil {
 		return State{}, fmt.Errorf("writing state file: %w", err)
 	}
 	return s, nil
+}
+
+// allocateFreshSlot returns the lowest slot that is (a) not already claimed
+// by another worktree's persisted ports.json and (b) has no host ports
+// currently bound by any local process. Caller must hold the slot lock.
+//
+// selfStateDir is excluded from the claimed-slot scan so a worktree
+// re-running loadOrInitState against its own state directory doesn't see
+// itself as a claimant.
+func allocateFreshSlot(selfStateDir string) int {
+	claimed := claimedSlots(selfStateDir)
+	for slot := 0; slot < 100; slot++ {
+		if claimed[slot] {
+			continue
+		}
+		if !AnyPortInUse(ProbePorts(slotPorts(slot))...) {
+			return slot
+		}
+	}
+	return 0
+}
+
+// claimedSlots returns the set of slots currently persisted by other
+// worktrees under ~/.liferay-cli/worktrees/. selfStateDir is omitted so a
+// worktree never sees its own (potentially in-flight) write as a foreign
+// claim.
+func claimedSlots(selfStateDir string) map[int]bool {
+	claimed := make(map[int]bool)
+	worktreesDir := filepath.Join(state.Root(), "worktrees")
+	entries, err := os.ReadDir(worktreesDir)
+	if err != nil {
+		return claimed
+	}
+	selfAbs, _ := filepath.Abs(selfStateDir)
+	for _, e := range entries {
+		if !e.IsDir() {
+			continue
+		}
+		portsPath := filepath.Join(worktreesDir, e.Name(), "docker", "ports.json")
+		if abs, _ := filepath.Abs(filepath.Dir(portsPath)); abs == selfAbs {
+			continue
+		}
+		data, err := os.ReadFile(portsPath)
+		if err != nil {
+			continue
+		}
+		var s State
+		if json.Unmarshal(data, &s) == nil {
+			claimed[s.Slot] = true
+		}
+	}
+	return claimed
 }
 
 // isPersisted returns true when the state file exists; distinguishes "slot 0
