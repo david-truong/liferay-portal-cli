@@ -23,24 +23,7 @@ status stay consistent across invocations and survive "ant all".
 
 MySQL runs in Docker — see "liferay db". "server start" and "server run"
 will bring up the db stack automatically if it isn't already running.`,
-	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
-		if err := rootPreSetup(cmd, args); err != nil {
-			return err
-		}
-		worktreeRoot, err := findWorktreeRoot()
-		if err != nil {
-			return nil
-		}
-		paths, err := resolvePaths()
-		if err != nil {
-			return nil
-		}
-		_ = state.SaveLastCmd(worktreeRoot, state.LastCmd{
-			Kind:    state.LastCmdServer,
-			LogPath: paths.CatOut,
-		})
-		return nil
-	},
+	PersistentPreRunE: rootPreSetup,
 }
 
 var serverStartCmd = &cobra.Command{
@@ -133,14 +116,29 @@ func startTomcat(foreground bool) error {
 		return fmt.Errorf("patching bundle for slot %d: %w", ports.Slot, err)
 	}
 	if foreground {
+		// Save before exec — once tomcat exits the user may want "liferay logs"
+		// to surface what happened.
+		saveServerLastCmd(paths.CatOut)
 		printServerBanner(paths, ports, serverDebug)
 		return tomcat.Start(paths, tomcat.StartOptions{Foreground: true, Debug: serverDebug})
 	}
 	if err := tomcat.Start(paths, tomcat.StartOptions{Debug: serverDebug}); err != nil {
 		return err
 	}
+	saveServerLastCmd(paths.CatOut)
 	printServerBanner(paths, ports, serverDebug)
 	return nil
+}
+
+func saveServerLastCmd(catOut string) {
+	worktreeRoot, err := findWorktreeRoot()
+	if err != nil {
+		return
+	}
+	_ = state.SaveLastCmd(worktreeRoot, state.LastCmd{
+		Kind:    state.LastCmdServer,
+		LogPath: catOut,
+	})
 }
 
 func printServerBanner(paths tomcat.Paths, ports docker.Ports, debug bool) {
@@ -185,6 +183,7 @@ func runServerLogs(_ *cobra.Command, _ []string) error {
 	if err != nil {
 		return err
 	}
+	saveServerLastCmd(paths.CatOut)
 	return tailServer(paths.CatOut, nil, 0)
 }
 

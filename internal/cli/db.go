@@ -25,20 +25,7 @@ Supported engines:
 The portal's Tomcat runs natively on the host (see "liferay server"). Each
 worktree gets its own data volume and port set so multiple worktrees can run
 in parallel.`,
-	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
-		if err := rootPreSetup(cmd, args); err != nil {
-			return err
-		}
-		worktreeRoot, err := findWorktreeRoot()
-		if err != nil {
-			return nil
-		}
-		_ = state.SaveLastCmd(worktreeRoot, state.LastCmd{
-			Kind:    state.LastCmdDB,
-			Service: "db",
-		})
-		return nil
-	},
+	PersistentPreRunE: rootPreSetup,
 }
 
 var dbEngine string
@@ -136,24 +123,29 @@ func runDBUp(_ *cobra.Command, _ []string) error {
 		return fmt.Errorf("resolving bundle dir: %w", err)
 	}
 
-	state, ports, err := docker.Setup(worktreeRoot, bundleDir, dbEngine)
+	dockerState, ports, err := docker.Setup(worktreeRoot, bundleDir, dbEngine)
 	if err != nil {
 		return fmt.Errorf("setting up docker compose: %w", err)
 	}
 
-	if !docker.IsDockerManagedEngine(state.Engine) {
-		fmt.Printf("Engine: %s (embedded — no container started)\n", state.Engine)
+	if !docker.IsDockerManagedEngine(dockerState.Engine) {
+		fmt.Printf("Engine: %s (embedded — no container started)\n", dockerState.Engine)
 		fmt.Printf("Bundle portal-ext.properties cleared of CLI jdbc overrides; Liferay will use its built-in HSQL.\n")
 		return nil
 	}
 
-	fmt.Printf("Starting %s stack (slot %d)\n", state.Engine, state.Slot)
+	fmt.Printf("Starting %s stack (slot %d)\n", dockerState.Engine, dockerState.Slot)
 	if err := docker.Run(worktreeRoot, "up", "-d"); err != nil {
 		return err
 	}
 
+	_ = state.SaveLastCmd(worktreeRoot, state.LastCmd{
+		Kind:    state.LastCmdDB,
+		Service: "db",
+	})
+
 	fmt.Printf("\nListening at:\n")
-	fmt.Printf("  %-8s localhost:%d\n", state.Engine, ports.MySQL)
+	fmt.Printf("  %-8s localhost:%d\n", dockerState.Engine, ports.MySQL)
 	fmt.Printf("  Adminer  http://localhost:%d\n", ports.Adminer)
 	fmt.Printf("\nBundle portal-ext.properties updated with jdbc URL.\n")
 	fmt.Printf("Start the portal with: liferay server start\n")
@@ -166,8 +158,8 @@ func runDBDown(_ *cobra.Command, _ []string) error {
 		return err
 	}
 
-	state, ok := docker.LoadState(worktreeRoot)
-	if !ok || !docker.IsDockerManagedEngine(state.Engine) {
+	dockerState, ok := docker.LoadState(worktreeRoot)
+	if !ok || !docker.IsDockerManagedEngine(dockerState.Engine) {
 		fmt.Printf("No Docker-managed database for this worktree; nothing to stop.\n")
 		return nil
 	}

@@ -43,7 +43,7 @@ func SaveLastCmd(worktreeRoot string, rec LastCmd) error {
 	if err := os.MkdirAll(filepath.Dir(p), 0755); err != nil {
 		return err
 	}
-	return os.WriteFile(p, data, 0644)
+	return WriteFileAtomic(p, data, 0644)
 }
 
 // LoadLastCmd returns (record, true) if a record exists for the worktree;

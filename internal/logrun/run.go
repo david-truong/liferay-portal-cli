@@ -62,12 +62,7 @@ func Run(cmd *exec.Cmd, opts Options) error {
 		})
 	}
 
-	displayPath := logPath
-	if home, err := os.UserHomeDir(); err == nil && home != "" {
-		if rel, err := filepath.Rel(home, logPath); err == nil && !strings.HasPrefix(rel, "..") {
-			displayPath = filepath.Join("~", rel)
-		}
-	}
+	displayPath := state.DisplayHome(logPath)
 
 	var out, errOut io.Writer = logFile, logFile
 	if opts.Verbose {
@@ -102,7 +97,7 @@ func newLogPath(label, worktreeRoot string) (string, error) {
 		}
 		return '-'
 	}, label)
-	name := fmt.Sprintf("%s-%s.log", safe, time.Now().Format("20060102-150405"))
+	name := fmt.Sprintf("%s-%s.log", safe, time.Now().Format("20060102-150405.000000000"))
 
 	dir := os.TempDir()
 	if worktreeRoot != "" {

@@ -124,10 +124,10 @@ func tailServer(catOut string, grepRE *regexp.Regexp, tail int) error {
 }
 
 func tailDB(worktreeRoot, service string, grepRE *regexp.Regexp, tail int) error {
-	dockerState, ok := docker.LoadState(worktreeRoot)
-	if !ok || !docker.IsDockerManagedEngine(dockerState.Engine) {
-		return fmt.Errorf("no Docker-managed database for this worktree (engine=%q)", dockerState.Engine)
+	if err := requireDockerEngine(worktreeRoot); err != nil {
+		return err
 	}
+	dockerState, _ := docker.LoadState(worktreeRoot)
 	announce("db", fmt.Sprintf("docker compose logs %s (slot %d)", service, dockerState.Slot))
 
 	composeArgs := []string{
@@ -211,16 +211,7 @@ func scanFiltered(r io.Reader, grepRE *regexp.Regexp, tail int) error {
 }
 
 func announce(kind, target string) {
-	fmt.Fprintf(os.Stderr, "[logs: %s — %s]\n", kind, displayHome(target))
-}
-
-func displayHome(p string) string {
-	if home, err := os.UserHomeDir(); err == nil && home != "" {
-		if rel, err := filepath.Rel(home, p); err == nil && !strings.HasPrefix(rel, "..") {
-			return filepath.Join("~", rel)
-		}
-	}
-	return p
+	fmt.Fprintf(os.Stderr, "[logs: %s — %s]\n", kind, state.DisplayHome(target))
 }
 
 func newestLog(logDir string) (string, error) {
@@ -241,7 +232,8 @@ func newestLog(logDir string) (string, error) {
 		if err != nil {
 			continue
 		}
-		if t := info.ModTime().UnixNano(); t > newestMod {
+		t := info.ModTime().UnixNano()
+		if t > newestMod || (t == newestMod && e.Name() > newest) {
 			newestMod = t
 			newest = e.Name()
 		}

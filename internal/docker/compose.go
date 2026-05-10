@@ -338,27 +338,27 @@ func loadOrInitState(stateDir, requestedEngine string) (State, error) {
 	}
 
 	portsFile := filepath.Join(stateDir, "ports.json")
-	var state State
+	var s State
 
 	if data, err := os.ReadFile(portsFile); err == nil {
-		_ = json.Unmarshal(data, &state)
+		_ = json.Unmarshal(data, &s)
 	}
 
-	if state.Slot < 0 || (state.Slot == 0 && !isPersisted(portsFile)) {
-		state.Slot = AllocatePorts().Slot
+	if s.Slot < 0 || (s.Slot == 0 && !isPersisted(portsFile)) {
+		s.Slot = AllocatePorts().Slot
 	}
-	if state.Engine == "" {
-		state.Engine = DefaultEngine
+	if s.Engine == "" {
+		s.Engine = DefaultEngine
 	}
 	if requestedEngine != "" {
-		state.Engine = requestedEngine
+		s.Engine = requestedEngine
 	}
 
-	data, _ := json.Marshal(state)
-	if err := os.WriteFile(portsFile, data, 0644); err != nil {
+	data, _ := json.Marshal(s)
+	if err := state.WriteFileAtomic(portsFile, data, 0644); err != nil {
 		return State{}, fmt.Errorf("writing state file: %w", err)
 	}
-	return state, nil
+	return s, nil
 }
 
 // isPersisted returns true when the state file exists; distinguishes "slot 0
