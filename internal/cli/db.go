@@ -1,7 +1,10 @@
 package cli
 
 import (
+	"encoding/json"
 	"fmt"
+	"io"
+	"os"
 
 	"github.com/david-truong/liferay-portal-cli/internal/docker"
 	"github.com/david-truong/liferay-portal-cli/internal/portal"
@@ -27,7 +30,10 @@ worktree gets its own data volume and port set so multiple worktrees can run
 in parallel.`,
 }
 
-var dbEngine string
+var (
+	dbEngine string
+	dbPsJSON bool
+)
 
 var dbUpCmd = &cobra.Command{
 	Use:     "start",
@@ -92,11 +98,37 @@ func runDBPs(_ *cobra.Command, _ []string) error {
 	if err != nil {
 		return err
 	}
+	if dbPsJSON {
+		dockerState, _ := docker.LoadState(worktreeRoot)
+		return dbPsJSONOutput(dockerState, os.Stdout)
+	}
 	if requireDockerEngine(worktreeRoot) != nil {
 		fmt.Printf("No Docker-managed database for this worktree; nothing to list.\n")
 		return nil
 	}
 	return docker.Run(worktreeRoot, "ps")
+}
+
+// dbPsJSONOutput emits the stable schema for `liferay db ps --json`. For
+// docker-managed engines, port is the host-side DB port. For hypersonic,
+// managed=false and port is the unused base value (3306) — agents should
+// branch on managed, not on port.
+func dbPsJSONOutput(st docker.State, out io.Writer) error {
+	ports := docker.PortsFromSlot(st.Slot)
+	payload := struct {
+		Engine  string `json:"engine"`
+		Slot    int    `json:"slot"`
+		Port    int    `json:"port"`
+		Managed bool   `json:"managed"`
+	}{
+		Engine:  st.Engine,
+		Slot:    st.Slot,
+		Port:    ports.MySQL,
+		Managed: docker.IsDockerManagedEngine(st.Engine),
+	}
+	enc := json.NewEncoder(out)
+	enc.SetIndent("", "  ")
+	return enc.Encode(payload)
 }
 
 func requireDockerEngine(worktreeRoot string) error {
@@ -109,6 +141,7 @@ func requireDockerEngine(worktreeRoot string) error {
 
 func init() {
 	dbUpCmd.Flags().StringVar(&dbEngine, "engine", "", "Database engine (mysql|mariadb|postgres|hypersonic); reuses the stored engine when omitted")
+	dbPsCmd.Flags().BoolVar(&dbPsJSON, "json", false, "Emit machine-readable JSON instead of docker compose ps output. Schema is stable: {engine, slot, port, managed}.")
 	dbCmd.AddCommand(dbUpCmd, dbDownCmd, dbRestartCmd, dbLogsCmd, dbPsCmd)
 	rootCmd.AddCommand(dbCmd)
 }

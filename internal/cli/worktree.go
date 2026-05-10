@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"encoding/json"
 	"fmt"
 	"io"
 	"os"
@@ -51,12 +52,85 @@ var worktreeRemoveCmd = &cobra.Command{
 	RunE:  runWorktreeRemove,
 }
 
+var worktreeListJSON bool
+
 var worktreeListCmd = &cobra.Command{
 	Use:   "list",
 	Short: "List git worktrees",
-	RunE: func(cmd *cobra.Command, args []string) error {
+	RunE:  runWorktreeList,
+}
+
+func runWorktreeList(_ *cobra.Command, _ []string) error {
+	if !worktreeListJSON {
 		return gitRun("worktree", "list")
-	},
+	}
+	porcelain, err := gitOutput("worktree", "list", "--porcelain")
+	if err != nil {
+		return err
+	}
+	primary, _ := gitPrimaryRoot("")
+	entries := parseWorktreePorcelain(porcelain, primary)
+	return emitWorktreeListJSON(entries, os.Stdout)
+}
+
+// worktreeEntry is the stable JSON shape for `liferay worktree list --json`.
+// Slot is -1 when the worktree has no persisted CLI state (i.e. liferay-cli
+// has never been run there).
+type worktreeEntry struct {
+	Path    string `json:"path"`
+	Branch  string `json:"branch"`
+	Slot    int    `json:"slot"`
+	Primary bool   `json:"primary"`
+}
+
+// parseWorktreePorcelain converts `git worktree list --porcelain` output
+// into a slice of worktreeEntry. Slot is read from each worktree's
+// persisted ports.json under ~/.liferay-cli/worktrees/<id>/docker/.
+func parseWorktreePorcelain(porcelain, primaryRoot string) []worktreeEntry {
+	blocks := strings.Split(strings.TrimSpace(porcelain), "\n\n")
+	entries := make([]worktreeEntry, 0, len(blocks))
+	for _, block := range blocks {
+		if strings.TrimSpace(block) == "" {
+			continue
+		}
+		entry := worktreeEntry{Slot: -1}
+		for _, line := range strings.Split(block, "\n") {
+			switch {
+			case strings.HasPrefix(line, "worktree "):
+				entry.Path = strings.TrimPrefix(line, "worktree ")
+			case strings.HasPrefix(line, "branch "):
+				ref := strings.TrimPrefix(line, "branch ")
+				entry.Branch = strings.TrimPrefix(ref, "refs/heads/")
+			}
+		}
+		if entry.Path == "" {
+			continue
+		}
+		entry.Slot = readPersistedSlot(entry.Path)
+		entry.Primary = entry.Path == primaryRoot
+		entries = append(entries, entry)
+	}
+	return entries
+}
+
+func readPersistedSlot(worktreePath string) int {
+	data, err := os.ReadFile(filepath.Join(state.Dir(worktreePath), "docker", "ports.json"))
+	if err != nil {
+		return -1
+	}
+	var s struct {
+		Slot int `json:"slot"`
+	}
+	if err := json.Unmarshal(data, &s); err != nil {
+		return -1
+	}
+	return s.Slot
+}
+
+func emitWorktreeListJSON(entries []worktreeEntry, out io.Writer) error {
+	enc := json.NewEncoder(out)
+	enc.SetIndent("", "  ")
+	return enc.Encode(entries)
 }
 
 var (
@@ -67,6 +141,7 @@ var (
 func init() {
 	worktreeAddCmd.Flags().BoolVar(&worktreeSkipBuild, "skip-build", false, "Skip running 'liferay build' (ant all) after creating the worktree")
 	worktreeRemoveCmd.Flags().BoolVar(&worktreeRemoveYes, "yes", false, "Skip the confirmation prompt. Required when stdin is not a TTY (or set LIFERAY_CLI_ASSUME_YES=1).")
+	worktreeListCmd.Flags().BoolVar(&worktreeListJSON, "json", false, "Emit machine-readable JSON instead of git porcelain. Schema is stable: [{path, branch, slot, primary}].")
 	worktreeCmd.AddCommand(worktreeAddCmd, worktreeRemoveCmd, worktreeListCmd)
 	rootCmd.AddCommand(worktreeCmd)
 }

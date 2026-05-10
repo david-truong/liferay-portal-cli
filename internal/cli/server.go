@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"encoding/json"
 	"fmt"
 	"io"
 	"os"
@@ -78,8 +79,9 @@ var serverWipeCmd = &cobra.Command{
 }
 
 var (
-	serverDebug   bool
-	serverWipeYes bool
+	serverDebug      bool
+	serverWipeYes    bool
+	serverStatusJSON bool
 )
 
 func init() {
@@ -87,6 +89,7 @@ func init() {
 	serverRunCmd.Flags().BoolVar(&serverDebug, "debug", false, "Run Tomcat in foreground with JDWP enabled (catalina.sh jpda run).")
 	serverRestartCmd.Flags().BoolVar(&serverDebug, "debug", false, "Restart with JDWP enabled.")
 	serverWipeCmd.Flags().BoolVar(&serverWipeYes, "yes", false, "Skip the confirmation prompt. Required when stdin is not a TTY (or set LIFERAY_CLI_ASSUME_YES=1).")
+	serverStatusCmd.Flags().BoolVar(&serverStatusJSON, "json", false, "Emit machine-readable JSON instead of human text. Schema is stable: {slot, pid, alive, port, jpda_port, bundle_dir}.")
 	serverCmd.AddCommand(
 		serverStartCmd, serverStopCmd, serverRestartCmd, serverRunCmd,
 		serverStatusCmd, serverLogsCmd, serverWipeCmd,
@@ -172,6 +175,13 @@ func runServerStatus(_ *cobra.Command, _ []string) error {
 		return err
 	}
 	pid, alive := tomcat.Status(paths)
+
+	if serverStatusJSON {
+		worktreeRoot, _ := findWorktreeRoot()
+		dockerState, _ := docker.LoadState(worktreeRoot)
+		return serverStatusJSONOutput(paths, dockerState, pid, alive, os.Stdout)
+	}
+
 	if alive {
 		fmt.Printf("running (pid %d)\n", pid)
 		return nil
@@ -182,6 +192,30 @@ func runServerStatus(_ *cobra.Command, _ []string) error {
 		fmt.Printf("not running\n")
 	}
 	return nil
+}
+
+// serverStatusJSONOutput is the testable JSON emitter. Schema is documented
+// in the --json flag help text and treated as stable.
+func serverStatusJSONOutput(paths tomcat.Paths, st docker.State, pid int, alive bool, out io.Writer) error {
+	ports := docker.PortsFromSlot(st.Slot)
+	payload := struct {
+		Slot      int    `json:"slot"`
+		Pid       int    `json:"pid"`
+		Alive     bool   `json:"alive"`
+		Port      int    `json:"port"`
+		JPDAPort  int    `json:"jpda_port"`
+		BundleDir string `json:"bundle_dir"`
+	}{
+		Slot:      st.Slot,
+		Pid:       pid,
+		Alive:     alive,
+		Port:      ports.TomcatHTTP,
+		JPDAPort:  ports.JPDA,
+		BundleDir: paths.Bundle,
+	}
+	enc := json.NewEncoder(out)
+	enc.SetIndent("", "  ")
+	return enc.Encode(payload)
 }
 
 func runServerLogs(_ *cobra.Command, _ []string) error {
