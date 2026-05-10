@@ -3,7 +3,6 @@ package cli
 import (
 	"fmt"
 	"os"
-	"os/exec"
 
 	"github.com/david-truong/liferay-portal-cli/internal/docker"
 	"github.com/david-truong/liferay-portal-cli/internal/portal"
@@ -107,20 +106,35 @@ func init() {
 }
 
 func runServerStart(_ *cobra.Command, _ []string) error {
+	return startTomcat(false)
+}
+
+func runServerRun(_ *cobra.Command, _ []string) error {
+	return startTomcat(true)
+}
+
+func startTomcat(foreground bool) error {
 	paths, err := resolvePaths()
 	if err != nil {
 		return err
 	}
 	if pid, alive := tomcat.Status(paths); alive {
+		if foreground {
+			return fmt.Errorf("tomcat already running (pid %d) — stop it first", pid)
+		}
 		fmt.Printf("Tomcat already running (pid %d)\n", pid)
 		return nil
 	}
-	_, ports, err := ensureDB(paths.Bundle)
+	ports, err := ensureDB(paths.Bundle)
 	if err != nil {
 		return err
 	}
 	if err := tomcat.PatchBundle(paths, ports); err != nil {
 		return fmt.Errorf("patching bundle for slot %d: %w", ports.Slot, err)
+	}
+	if foreground {
+		printServerBanner(paths, ports, serverDebug)
+		return tomcat.Start(paths, tomcat.StartOptions{Foreground: true, Debug: serverDebug})
 	}
 	if err := tomcat.Start(paths, tomcat.StartOptions{Debug: serverDebug}); err != nil {
 		return err
@@ -148,25 +162,6 @@ func runServerStop(_ *cobra.Command, _ []string) error {
 	return tomcat.Stop(paths)
 }
 
-func runServerRun(_ *cobra.Command, _ []string) error {
-	paths, err := resolvePaths()
-	if err != nil {
-		return err
-	}
-	if pid, alive := tomcat.Status(paths); alive {
-		return fmt.Errorf("tomcat already running (pid %d) — stop it first", pid)
-	}
-	_, ports, err := ensureDB(paths.Bundle)
-	if err != nil {
-		return err
-	}
-	if err := tomcat.PatchBundle(paths, ports); err != nil {
-		return fmt.Errorf("patching bundle for slot %d: %w", ports.Slot, err)
-	}
-	printServerBanner(paths, ports, serverDebug)
-	return tomcat.Start(paths, tomcat.StartOptions{Foreground: true, Debug: serverDebug})
-}
-
 func runServerStatus(_ *cobra.Command, _ []string) error {
 	paths, err := resolvePaths()
 	if err != nil {
@@ -190,13 +185,7 @@ func runServerLogs(_ *cobra.Command, _ []string) error {
 	if err != nil {
 		return err
 	}
-	if _, err := os.Stat(paths.CatOut); err != nil {
-		return fmt.Errorf("no catalina.out at %s (server has not been started)", paths.CatOut)
-	}
-	cmd := exec.Command("tail", "-f", paths.CatOut)
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	return cmd.Run()
+	return tailServer(paths.CatOut, nil, 0)
 }
 
 func runServerWipe(_ *cobra.Command, _ []string) error {
@@ -219,27 +208,27 @@ func runServerWipe(_ *cobra.Command, _ []string) error {
 	return nil
 }
 
-func ensureDB(bundleDir string) (docker.State, docker.Ports, error) {
+func ensureDB(bundleDir string) (docker.Ports, error) {
 	worktreeRoot, err := findWorktreeRoot()
 	if err != nil {
-		return docker.State{}, docker.Ports{}, err
+		return docker.Ports{}, err
 	}
 	if err := checkStockPorts(worktreeRoot); err != nil {
-		return docker.State{}, docker.Ports{}, err
+		return docker.Ports{}, err
 	}
 	state, ports, err := docker.Setup(worktreeRoot, bundleDir, "")
 	if err != nil {
-		return docker.State{}, docker.Ports{}, fmt.Errorf("setting up docker compose: %w", err)
+		return docker.Ports{}, fmt.Errorf("setting up docker compose: %w", err)
 	}
 	if !docker.IsDockerManagedEngine(state.Engine) {
 		fmt.Printf("Engine: %s (embedded — skipping Docker)\n", state.Engine)
-		return state, ports, nil
+		return ports, nil
 	}
 	fmt.Printf("Ensuring %s (slot %d, localhost:%d)...\n", state.Engine, state.Slot, ports.MySQL)
 	if err := docker.Run(worktreeRoot, "up", "-d", "--wait"); err != nil {
-		return state, ports, err
+		return ports, err
 	}
-	return state, ports, nil
+	return ports, nil
 }
 
 func resolvePaths() (tomcat.Paths, error) {

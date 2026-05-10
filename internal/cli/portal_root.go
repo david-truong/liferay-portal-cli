@@ -17,6 +17,14 @@ func findWorktreeRoot() (string, error) {
 	return portal.FindRoot(cwd)
 }
 
+func buildModuleIndex(portalRoot string) (*portal.ModuleIndex, error) {
+	idx, err := portal.BuildModuleIndex(portalRoot)
+	if err != nil {
+		return nil, fmt.Errorf("building module index: %w", err)
+	}
+	return idx, nil
+}
+
 func isLinkedWorktree(portalRoot string) bool {
 	info, err := os.Stat(filepath.Join(portalRoot, ".git"))
 	return err == nil && !info.IsDir()

@@ -77,8 +77,8 @@ var dbLogsCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		if state, ok := docker.LoadState(worktreeRoot); !ok || !docker.IsDockerManagedEngine(state.Engine) {
-			return fmt.Errorf("no Docker-managed database for this worktree (engine=%q)", state.Engine)
+		if err := requireDockerEngine(worktreeRoot); err != nil {
+			return err
 		}
 		service := "db"
 		if len(args) > 0 {
@@ -100,11 +100,19 @@ var dbPsCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		if state, ok := docker.LoadState(worktreeRoot); !ok || !docker.IsDockerManagedEngine(state.Engine) {
-			return fmt.Errorf("no Docker-managed database for this worktree (engine=%q)", state.Engine)
+		if err := requireDockerEngine(worktreeRoot); err != nil {
+			return err
 		}
 		return docker.Run(worktreeRoot, "ps")
 	},
+}
+
+func requireDockerEngine(worktreeRoot string) error {
+	dockerState, ok := docker.LoadState(worktreeRoot)
+	if !ok || !docker.IsDockerManagedEngine(dockerState.Engine) {
+		return fmt.Errorf("no Docker-managed database for this worktree (engine=%q)", dockerState.Engine)
+	}
+	return nil
 }
 
 func init() {

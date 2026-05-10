@@ -1,13 +1,10 @@
 package cli
 
 import (
-	"fmt"
-	"os"
 	"path/filepath"
 
 	"github.com/david-truong/liferay-portal-cli/internal/gradle"
 	"github.com/david-truong/liferay-portal-cli/internal/logrun"
-	"github.com/david-truong/liferay-portal-cli/internal/portal"
 	"github.com/spf13/cobra"
 )
 
@@ -38,19 +35,14 @@ func init() {
 }
 
 func runTest(cmd *cobra.Command, args []string) error {
-	cwd, err := os.Getwd()
+	portalRoot, err := findWorktreeRoot()
 	if err != nil {
 		return err
 	}
 
-	portalRoot, err := portal.FindRoot(cwd)
+	idx, err := buildModuleIndex(portalRoot)
 	if err != nil {
 		return err
-	}
-
-	idx, err := portal.BuildModuleIndex(portalRoot)
-	if err != nil {
-		return fmt.Errorf("building module index: %w", err)
 	}
 
 	modulePath, err := idx.Resolve(args[0])

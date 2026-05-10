@@ -1,12 +1,10 @@
 package cli
 
 import (
-	"os"
 	"path/filepath"
 
 	"github.com/david-truong/liferay-portal-cli/internal/gradle"
 	"github.com/david-truong/liferay-portal-cli/internal/logrun"
-	"github.com/david-truong/liferay-portal-cli/internal/portal"
 	"github.com/spf13/cobra"
 )
 
@@ -33,12 +31,7 @@ func init() {
 }
 
 func runPoshi(cmd *cobra.Command, args []string) error {
-	cwd, err := os.Getwd()
-	if err != nil {
-		return err
-	}
-
-	portalRoot, err := portal.FindRoot(cwd)
+	portalRoot, err := findWorktreeRoot()
 	if err != nil {
 		return err
 	}

@@ -153,32 +153,13 @@ func ensureWorktreeFiles(primaryRoot, worktreeRoot string) []fixAction {
 			if base == pat.tracked {
 				continue
 			}
-			dst := filepath.Join(worktreeRoot, base)
-			if fsutil.Exists(dst) {
-				results = append(results, fixAction{base, "skipped", "already exists"})
-				continue
-			}
-			if err := fsutil.CopyFile(src, dst); err != nil {
-				results = append(results, fixAction{base, "failed", err.Error()})
-				continue
-			}
-			results = append(results, fixAction{base, "copied", ""})
+			results = append(results, copyIfMissing(base, src, filepath.Join(worktreeRoot, base)))
 		}
 	}
 
 	// .env
 	if envSrc := filepath.Join(primaryRoot, ".env"); fsutil.Exists(envSrc) {
-		envDst := filepath.Join(worktreeRoot, ".env")
-		switch {
-		case fsutil.Exists(envDst):
-			results = append(results, fixAction{".env", "skipped", "already exists"})
-		default:
-			if err := fsutil.CopyFile(envSrc, envDst); err != nil {
-				results = append(results, fixAction{".env", "failed", err.Error()})
-			} else {
-				results = append(results, fixAction{".env", "copied", ""})
-			}
-		}
+		results = append(results, copyIfMissing(".env", envSrc, filepath.Join(worktreeRoot, ".env")))
 	}
 
 	// app.server.<user>.properties
@@ -198,30 +179,37 @@ func ensureWorktreeFiles(primaryRoot, worktreeRoot string) []fixAction {
 	// bundles/portal-setup-wizard.properties
 	setupWizardRel := filepath.Join("bundles", "portal-setup-wizard.properties")
 	setupWizardDst := filepath.Join(worktreeRoot, setupWizardRel)
-	switch {
-	case fsutil.Exists(setupWizardDst):
+	if fsutil.Exists(setupWizardDst) {
 		results = append(results, fixAction{setupWizardRel, "skipped", "already exists"})
-	default:
-		if err := os.MkdirAll(filepath.Dir(setupWizardDst), 0755); err != nil {
+	} else if err := os.MkdirAll(filepath.Dir(setupWizardDst), 0755); err != nil {
+		results = append(results, fixAction{setupWizardRel, "failed", err.Error()})
+	} else {
+		content := "admin.email.from.address=test@liferay.com\n" +
+			"admin.email.from.name=Test Test\n" +
+			"company.default.locale=en_US\n" +
+			"company.default.time.zone=UTC\n" +
+			"company.default.web.id=liferay.com\n" +
+			"default.admin.email.address.prefix=test\n" +
+			"liferay.home=" + filepath.Join(worktreeRoot, "bundles") + "\n" +
+			"setup.wizard.enabled=false\n"
+		if err := os.WriteFile(setupWizardDst, []byte(content), 0644); err != nil {
 			results = append(results, fixAction{setupWizardRel, "failed", err.Error()})
 		} else {
-			content := "admin.email.from.address=test@liferay.com\n" +
-				"admin.email.from.name=Test Test\n" +
-				"company.default.locale=en_US\n" +
-				"company.default.time.zone=UTC\n" +
-				"company.default.web.id=liferay.com\n" +
-				"default.admin.email.address.prefix=test\n" +
-				"liferay.home=" + filepath.Join(worktreeRoot, "bundles") + "\n" +
-				"setup.wizard.enabled=false\n"
-			if err := os.WriteFile(setupWizardDst, []byte(content), 0644); err != nil {
-				results = append(results, fixAction{setupWizardRel, "failed", err.Error()})
-			} else {
-				results = append(results, fixAction{setupWizardRel, "generated", "skips setup wizard on first boot"})
-			}
+			results = append(results, fixAction{setupWizardRel, "generated", "skips setup wizard on first boot"})
 		}
 	}
 
 	return results
+}
+
+func copyIfMissing(name, src, dst string) fixAction {
+	if fsutil.Exists(dst) {
+		return fixAction{name, "skipped", "already exists"}
+	}
+	if err := fsutil.CopyFile(src, dst); err != nil {
+		return fixAction{name, "failed", err.Error()}
+	}
+	return fixAction{name, "copied", ""}
 }
 
 func propagatePortalFiles(primaryRoot, worktreeRoot string) error {

@@ -8,7 +8,6 @@ import (
 	"github.com/david-truong/liferay-portal-cli/internal/docker"
 	"github.com/david-truong/liferay-portal-cli/internal/gradle"
 	"github.com/david-truong/liferay-portal-cli/internal/logrun"
-	"github.com/david-truong/liferay-portal-cli/internal/portal"
 	"github.com/david-truong/liferay-portal-cli/internal/state"
 	"github.com/spf13/cobra"
 )
@@ -49,19 +48,14 @@ func init() {
 }
 
 func runTestIntegration(cmd *cobra.Command, args []string) error {
-	cwd, err := os.Getwd()
+	portalRoot, err := findWorktreeRoot()
 	if err != nil {
 		return err
 	}
 
-	portalRoot, err := portal.FindRoot(cwd)
+	idx, err := buildModuleIndex(portalRoot)
 	if err != nil {
 		return err
-	}
-
-	idx, err := portal.BuildModuleIndex(portalRoot)
-	if err != nil {
-		return fmt.Errorf("building module index: %w", err)
 	}
 
 	modulePath, err := idx.Resolve(args[0])
@@ -71,9 +65,11 @@ func runTestIntegration(cmd *cobra.Command, args []string) error {
 
 	gwArgs := []string{"testIntegration", "--tests", testIntegrationTests}
 
-	if initScript, err := writeSlotInitScript(portalRoot); err != nil {
+	initScript, err := writeSlotInitScript(portalRoot)
+	if err != nil {
 		return err
-	} else if initScript != "" {
+	}
+	if initScript != "" {
 		gwArgs = append([]string{"-I", initScript}, gwArgs...)
 	}
 

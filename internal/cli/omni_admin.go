@@ -47,11 +47,7 @@ func init() {
 }
 
 func omniAdminModulesDir() (string, error) {
-	cwd, err := os.Getwd()
-	if err != nil {
-		return "", err
-	}
-	portalRoot, err := portal.FindRoot(cwd)
+	portalRoot, err := findWorktreeRoot()
 	if err != nil {
 		return "", err
 	}
@@ -78,28 +74,31 @@ func runOmniAdminInstall(cmd *cobra.Command, args []string) error {
 	}
 
 	for _, entry := range entries {
-		src, err := omniAdminJars.Open(filepath.Join(omniAdminJarDir, entry.Name()))
-		if err != nil {
-			return fmt.Errorf("opening %s: %w", entry.Name(), err)
-		}
 		dstPath := filepath.Join(modulesDir, entry.Name())
-		dst, err := os.Create(dstPath)
-		if err != nil {
-			src.Close()
-			return fmt.Errorf("creating %s: %w", dstPath, err)
-		}
-		if _, err := io.Copy(dst, src); err != nil {
-			src.Close()
-			dst.Close()
-			return fmt.Errorf("writing %s: %w", dstPath, err)
-		}
-		src.Close()
-		if err := dst.Close(); err != nil {
+		if err := copyEmbeddedJar(entry.Name(), dstPath); err != nil {
 			return err
 		}
 		fmt.Printf("installed %s\n", dstPath)
 	}
 	return nil
+}
+
+func copyEmbeddedJar(name, dstPath string) error {
+	src, err := omniAdminJars.Open(filepath.Join(omniAdminJarDir, name))
+	if err != nil {
+		return fmt.Errorf("opening %s: %w", name, err)
+	}
+	defer src.Close()
+
+	dst, err := os.Create(dstPath)
+	if err != nil {
+		return fmt.Errorf("creating %s: %w", dstPath, err)
+	}
+	if _, err := io.Copy(dst, src); err != nil {
+		dst.Close()
+		return fmt.Errorf("writing %s: %w", dstPath, err)
+	}
+	return dst.Close()
 }
 
 func runOmniAdminUninstall(cmd *cobra.Command, args []string) error {

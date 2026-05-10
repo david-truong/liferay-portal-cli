@@ -12,7 +12,6 @@ import (
 	"strings"
 
 	"github.com/david-truong/liferay-portal-cli/internal/docker"
-	"github.com/david-truong/liferay-portal-cli/internal/portal"
 	"github.com/david-truong/liferay-portal-cli/internal/state"
 	"github.com/spf13/cobra"
 )
@@ -44,11 +43,7 @@ func init() {
 }
 
 func runLogs(_ *cobra.Command, _ []string) error {
-	cwd, err := os.Getwd()
-	if err != nil {
-		return err
-	}
-	worktreeRoot, err := portal.FindRoot(cwd)
+	worktreeRoot, err := findWorktreeRoot()
 	if err != nil {
 		return err
 	}

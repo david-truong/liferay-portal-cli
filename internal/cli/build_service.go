@@ -7,7 +7,6 @@ import (
 
 	"github.com/david-truong/liferay-portal-cli/internal/gradle"
 	"github.com/david-truong/liferay-portal-cli/internal/logrun"
-	"github.com/david-truong/liferay-portal-cli/internal/portal"
 	"github.com/spf13/cobra"
 )
 
@@ -32,33 +31,44 @@ func init() {
 }
 
 func runBuildService(cmd *cobra.Command, args []string) error {
-	cwd, err := os.Getwd()
+	return runBuilder(args[0], builderSpec{
+		requiredFile: "service.xml",
+		moduleKind:   "service module",
+		gradleTask:   "buildService",
+		labelPrefix:  "build-service-",
+	})
+}
+
+type builderSpec struct {
+	requiredFile string
+	moduleKind   string
+	gradleTask   string
+	labelPrefix  string
+}
+
+func runBuilder(moduleName string, spec builderSpec) error {
+	portalRoot, err := findWorktreeRoot()
 	if err != nil {
 		return err
 	}
 
-	portalRoot, err := portal.FindRoot(cwd)
+	idx, err := buildModuleIndex(portalRoot)
 	if err != nil {
 		return err
 	}
 
-	idx, err := portal.BuildModuleIndex(portalRoot)
-	if err != nil {
-		return fmt.Errorf("building module index: %w", err)
-	}
-
-	modulePath, err := idx.Resolve(args[0])
+	modulePath, err := idx.Resolve(moduleName)
 	if err != nil {
 		return err
 	}
 
-	if _, err := os.Stat(filepath.Join(modulePath, "service.xml")); os.IsNotExist(err) {
-		return fmt.Errorf("module %q has no service.xml — is this a service module?", args[0])
+	if _, err := os.Stat(filepath.Join(modulePath, spec.requiredFile)); os.IsNotExist(err) {
+		return fmt.Errorf("module %q has no %s — is this a %s?", moduleName, spec.requiredFile, spec.moduleKind)
 	}
 
-	gwCmd, err := gradle.Command(modulePath, "buildService")
+	gwCmd, err := gradle.Command(modulePath, spec.gradleTask)
 	if err != nil {
 		return err
 	}
-	return logrun.Run(gwCmd, logrun.Options{Label: "build-service-" + filepath.Base(modulePath), Verbose: verbose, WorktreeRoot: portalRoot})
+	return logrun.Run(gwCmd, logrun.Options{Label: spec.labelPrefix + filepath.Base(modulePath), Verbose: verbose, WorktreeRoot: portalRoot})
 }

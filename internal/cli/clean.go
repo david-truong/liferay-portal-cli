@@ -2,14 +2,10 @@ package cli
 
 import (
 	"fmt"
-	"os"
-	"os/exec"
 	"path/filepath"
-	"runtime"
 
 	"github.com/david-truong/liferay-portal-cli/internal/gradle"
 	"github.com/david-truong/liferay-portal-cli/internal/logrun"
-	"github.com/david-truong/liferay-portal-cli/internal/portal"
 	"github.com/spf13/cobra"
 )
 
@@ -34,23 +30,18 @@ func init() {
 }
 
 func runClean(cmd *cobra.Command, args []string) error {
-	cwd, err := os.Getwd()
-	if err != nil {
-		return err
-	}
-
-	portalRoot, err := portal.FindRoot(cwd)
+	portalRoot, err := findWorktreeRoot()
 	if err != nil {
 		return err
 	}
 
 	if len(args) == 0 {
-		return runAntClean(portalRoot)
+		return runAnt(portalRoot, portalRoot, "clean", "clean-all")
 	}
 
-	idx, err := portal.BuildModuleIndex(portalRoot)
+	idx, err := buildModuleIndex(portalRoot)
 	if err != nil {
-		return fmt.Errorf("building module index: %w", err)
+		return err
 	}
 
 	for _, name := range args {
@@ -63,23 +54,6 @@ func runClean(cmd *cobra.Command, args []string) error {
 		}
 	}
 	return nil
-}
-
-func runAntClean(portalRoot string) error {
-	antName := "ant"
-	if runtime.GOOS == "windows" {
-		if _, err := exec.LookPath("ant"); err != nil {
-			antName = "ant.bat"
-		}
-	}
-	path, err := exec.LookPath(antName)
-	if err != nil {
-		return fmt.Errorf("ant not found on PATH — install Apache Ant (https://ant.apache.org/)")
-	}
-
-	cmd := exec.Command(path, "clean")
-	cmd.Dir = portalRoot
-	return logrun.Run(cmd, logrun.Options{Label: "clean-all", Verbose: verbose, WorktreeRoot: portalRoot})
 }
 
 func runGwClean(portalRoot, moduleDir string) error {

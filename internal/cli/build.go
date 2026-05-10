@@ -2,7 +2,6 @@ package cli
 
 import (
 	"fmt"
-	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
@@ -10,7 +9,6 @@ import (
 
 	"github.com/david-truong/liferay-portal-cli/internal/gradle"
 	"github.com/david-truong/liferay-portal-cli/internal/logrun"
-	"github.com/david-truong/liferay-portal-cli/internal/portal"
 	"github.com/spf13/cobra"
 )
 
@@ -52,12 +50,7 @@ func init() {
 }
 
 func runBuild(cmd *cobra.Command, args []string) error {
-	cwd, err := os.Getwd()
-	if err != nil {
-		return err
-	}
-
-	portalRoot, err := portal.FindRoot(cwd)
+	portalRoot, err := findWorktreeRoot()
 	if err != nil {
 		return err
 	}
@@ -66,9 +59,9 @@ func runBuild(cmd *cobra.Command, args []string) error {
 		return runAntAll(portalRoot)
 	}
 
-	idx, err := portal.BuildModuleIndex(portalRoot)
+	idx, err := buildModuleIndex(portalRoot)
 	if err != nil {
-		return fmt.Errorf("building module index: %w", err)
+		return err
 	}
 
 	for _, name := range args {
@@ -93,24 +86,25 @@ func runBuild(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-func runAntDeploy(portalRoot, projectDir string) error {
-	antName := "ant"
-	if runtime.GOOS == "windows" {
-		if _, err := exec.LookPath("ant"); err != nil {
-			antName = "ant.bat"
-		}
-	}
-	path, err := exec.LookPath(antName)
+func runAnt(portalRoot, dir, target, label string) error {
+	path, err := lookupAnt()
 	if err != nil {
-		return fmt.Errorf("ant not found on PATH — install Apache Ant (https://ant.apache.org/)")
+		return err
 	}
+	cmd := exec.Command(path, target)
+	cmd.Dir = dir
+	return logrun.Run(cmd, logrun.Options{Label: label, Verbose: verbose, WorktreeRoot: portalRoot})
+}
 
-	cmd := exec.Command(path, "deploy")
-	cmd.Dir = projectDir
-	return logrun.Run(cmd, logrun.Options{Label: "deploy-" + filepath.Base(projectDir), Verbose: verbose, WorktreeRoot: portalRoot})
+func runAntDeploy(portalRoot, projectDir string) error {
+	return runAnt(portalRoot, projectDir, "deploy", "deploy-"+filepath.Base(projectDir))
 }
 
 func runAntAll(portalRoot string) error {
+	return runAnt(portalRoot, portalRoot, "all", "build-all")
+}
+
+func lookupAnt() (string, error) {
 	antName := "ant"
 	if runtime.GOOS == "windows" {
 		if _, err := exec.LookPath("ant"); err != nil {
@@ -119,12 +113,9 @@ func runAntAll(portalRoot string) error {
 	}
 	path, err := exec.LookPath(antName)
 	if err != nil {
-		return fmt.Errorf("ant not found on PATH — install Apache Ant (https://ant.apache.org/)")
+		return "", fmt.Errorf("ant not found on PATH — install Apache Ant (https://ant.apache.org/)")
 	}
-
-	cmd := exec.Command(path, "all")
-	cmd.Dir = portalRoot
-	return logrun.Run(cmd, logrun.Options{Label: "build-all", Verbose: verbose, WorktreeRoot: portalRoot})
+	return path, nil
 }
 
 func runGwCompileTest(portalRoot, moduleDir string) error {

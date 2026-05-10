@@ -2,15 +2,11 @@ package cli
 
 import (
 	"fmt"
-	"os"
-	"os/exec"
 	"path/filepath"
-	"runtime"
 	"strings"
 
 	"github.com/david-truong/liferay-portal-cli/internal/gradle"
 	"github.com/david-truong/liferay-portal-cli/internal/logrun"
-	"github.com/david-truong/liferay-portal-cli/internal/portal"
 	"github.com/spf13/cobra"
 )
 
@@ -33,23 +29,18 @@ func init() {
 }
 
 func runSf(cmd *cobra.Command, args []string) error {
-	cwd, err := os.Getwd()
-	if err != nil {
-		return err
-	}
-
-	portalRoot, err := portal.FindRoot(cwd)
+	portalRoot, err := findWorktreeRoot()
 	if err != nil {
 		return err
 	}
 
 	if len(args) == 0 {
-		return runAntFormatSource(portalRoot)
+		return runAnt(portalRoot, filepath.Join(portalRoot, "portal-impl"), "format-source-current-branch", "format-source")
 	}
 
-	idx, err := portal.BuildModuleIndex(portalRoot)
+	idx, err := buildModuleIndex(portalRoot)
 	if err != nil {
-		return fmt.Errorf("building module index: %w", err)
+		return err
 	}
 
 	for _, name := range args {
@@ -65,23 +56,6 @@ func runSf(cmd *cobra.Command, args []string) error {
 		}
 	}
 	return nil
-}
-
-func runAntFormatSource(portalRoot string) error {
-	antName := "ant"
-	if runtime.GOOS == "windows" {
-		if _, err := exec.LookPath("ant"); err != nil {
-			antName = "ant.bat"
-		}
-	}
-	path, err := exec.LookPath(antName)
-	if err != nil {
-		return fmt.Errorf("ant not found on PATH — install Apache Ant (https://ant.apache.org/)")
-	}
-
-	cmd := exec.Command(path, "format-source-current-branch")
-	cmd.Dir = filepath.Join(portalRoot, "portal-impl")
-	return logrun.Run(cmd, logrun.Options{Label: "format-source", Verbose: verbose, WorktreeRoot: portalRoot})
 }
 
 func runGwFormatSource(portalRoot, moduleDir string) error {
