@@ -14,12 +14,12 @@ var (
 
 var rootCmd = &cobra.Command{
 	Use:   "liferay",
-	Short: "Agent-oriented CLI for Liferay portal workflows",
-	Long: `liferay is built for AI agents, not human developers.
+	Short: "CLI for Liferay portal workflows, built for agents and humans alike",
+	Long: `liferay drives every common Liferay workflow from a single working directory
+(the portal root) with no cd, no interactive prompts, and no arcane flags.
 
-Every command works from a single working directory (the portal root) with no cd,
-no interactive prompts, and no arcane flags. Human developers should keep using
-gw, blade, and their IDE.`,
+Designed first for AI agents, but useful to any developer who'd rather not
+juggle gw, blade, catalina.sh, and docker compose by hand.`,
 	SilenceUsage:      true,
 	PersistentPreRunE: rootPreSetup,
 }
