@@ -58,39 +58,45 @@ var dbLogsCmd = &cobra.Command{
 	Use:   "logs [service]",
 	Short: "Follow container logs (default: db)",
 	Args:  cobra.MaximumNArgs(1),
-	RunE: func(cmd *cobra.Command, args []string) error {
-		worktreeRoot, err := findWorktreeRoot()
-		if err != nil {
-			return err
-		}
-		if err := requireDockerEngine(worktreeRoot); err != nil {
-			return err
-		}
-		service := "db"
-		if len(args) > 0 {
-			service = args[0]
-		}
-		_ = state.SaveLastCmd(worktreeRoot, state.LastCmd{
-			Kind:    state.LastCmdDB,
-			Service: service,
-		})
-		return docker.Run(worktreeRoot, "logs", "-f", service)
-	},
+	RunE:  runDBLogs,
 }
 
 var dbPsCmd = &cobra.Command{
 	Use:   "ps",
 	Short: "List containers in this worktree's db stack",
-	RunE: func(cmd *cobra.Command, args []string) error {
-		worktreeRoot, err := findWorktreeRoot()
-		if err != nil {
-			return err
-		}
-		if err := requireDockerEngine(worktreeRoot); err != nil {
-			return err
-		}
-		return docker.Run(worktreeRoot, "ps")
-	},
+	RunE:  runDBPs,
+}
+
+func runDBLogs(_ *cobra.Command, args []string) error {
+	worktreeRoot, err := findWorktreeRoot()
+	if err != nil {
+		return err
+	}
+	if requireDockerEngine(worktreeRoot) != nil {
+		fmt.Printf("No Docker-managed database for this worktree; nothing to tail.\n")
+		return nil
+	}
+	service := "db"
+	if len(args) > 0 {
+		service = args[0]
+	}
+	_ = state.SaveLastCmd(worktreeRoot, state.LastCmd{
+		Kind:    state.LastCmdDB,
+		Service: service,
+	})
+	return docker.Run(worktreeRoot, "logs", "-f", service)
+}
+
+func runDBPs(_ *cobra.Command, _ []string) error {
+	worktreeRoot, err := findWorktreeRoot()
+	if err != nil {
+		return err
+	}
+	if requireDockerEngine(worktreeRoot) != nil {
+		fmt.Printf("No Docker-managed database for this worktree; nothing to list.\n")
+		return nil
+	}
+	return docker.Run(worktreeRoot, "ps")
 }
 
 func requireDockerEngine(worktreeRoot string) error {
