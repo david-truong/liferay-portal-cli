@@ -31,6 +31,14 @@ func PatchBundle(paths Paths, ports docker.Ports) error {
 		return nil
 	}
 
+	// Snapshot the pre-patch state of every file the steps below will
+	// touch, so a partial failure or an explicit `liferay bundle unpatch`
+	// can roll back to a known-good state.
+	stateDir := filepath.Dir(paths.PidFile)
+	if _, err := Snapshot(paths, stateDir); err != nil {
+		return fmt.Errorf("snapshotting bundle before patch: %w", err)
+	}
+
 	steps := []func() error{
 		func() error { return patchServerXML(paths.Tomcat, ports) },
 		func() error { return patchSetenvSh(paths.Bin, ports) },
