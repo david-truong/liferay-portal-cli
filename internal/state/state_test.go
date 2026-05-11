@@ -50,6 +50,25 @@ func TestDir_RelativePathResolvesToAbsolute(t *testing.T) {
 	}
 }
 
+func TestRoot_PanicsWhenHomeMissing(t *testing.T) {
+	// Force os.UserHomeDir to fail by unsetting every variable it
+	// consults.
+	t.Setenv("HOME", "")
+	t.Setenv("USERPROFILE", "")
+
+	defer func() {
+		r := recover()
+		if r == nil {
+			t.Fatal("expected Root to panic when HOME is unset")
+		}
+		msg, ok := r.(string)
+		if !ok || !strings.Contains(msg, "HOME") {
+			t.Errorf("panic message should mention HOME, got %v", r)
+		}
+	}()
+	_ = Root()
+}
+
 func TestDir_LivesUnderHome(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)

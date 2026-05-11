@@ -12,13 +12,17 @@ import (
 )
 
 // Root returns the host-wide ~/.liferay-cli/ directory that contains every
-// per-worktree subtree plus host-global state (e.g. the slot allocation lock
-// file). Falls back to os.TempDir() when the home directory cannot be
-// resolved; that fallback is documented tech debt — see CHANGELOG.
+// per-worktree subtree plus host-global state (e.g. the slot allocation
+// lock file). Panics when the home directory cannot be resolved — silently
+// falling back to os.TempDir() would put persistent state on a path that
+// gets wiped on reboot, which is worse than refusing to run. Callers that
+// can't recover from this should validate at startup via the same
+// os.UserHomeDir() call so the user gets a clean error message instead of
+// a stack trace.
 func Root() string {
 	home, err := os.UserHomeDir()
 	if err != nil || home == "" {
-		home = os.TempDir()
+		panic("state.Root: HOME (USERPROFILE on Windows) is not set — liferay-cli requires a writable user home directory")
 	}
 	return filepath.Join(home, ".liferay-cli")
 }

@@ -48,6 +48,11 @@ func init() {
 }
 
 func Execute(version string) {
+	if home, err := os.UserHomeDir(); err != nil || home == "" {
+		fmt.Fprintln(os.Stderr,
+			"Error: HOME (USERPROFILE on Windows) is not set. liferay-cli stores per-worktree state under ~/.liferay-cli/ and cannot run without a writable user home directory.")
+		os.Exit(ExitGeneric)
+	}
 	rootCmd.Version = version
 	err := rootCmd.Execute()
 	if code := resolveExitCode(err); code != ExitOK {
