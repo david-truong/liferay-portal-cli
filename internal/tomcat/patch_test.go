@@ -133,6 +133,29 @@ func TestPatchSetenvSh_SingleExistingLine(t *testing.T) {
 	}
 }
 
+func TestPatchSetenvSh_PreservesMode(t *testing.T) {
+	binDir := t.TempDir()
+	original := "#!/bin/sh\nexport CATALINA_OPTS=\"-Xmx2g\"\n"
+	path := filepath.Join(binDir, "setenv.sh")
+	// 0744 — owner rwx, group r, world r. Different from the previous
+	// hard-coded 0755 so we'd see a regression as a mode bump.
+	if err := os.WriteFile(path, []byte(original), 0744); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := patchSetenvSh(binDir, docker.PortsFromSlot(1)); err != nil {
+		t.Fatalf("patchSetenvSh: %v", err)
+	}
+
+	info, err := os.Stat(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if info.Mode().Perm() != 0744 {
+		t.Errorf("setenv.sh mode = %v, want 0744 (should preserve existing mode)", info.Mode().Perm())
+	}
+}
+
 func TestPatchSetenvSh_NoTrailingNewline(t *testing.T) {
 	binDir := t.TempDir()
 	original := "#!/bin/sh\nexport CATALINA_OPTS=\"-Xmx2g\"" // no \n at end

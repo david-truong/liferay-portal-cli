@@ -70,7 +70,7 @@ func patchServerXML(tomcatDir string, ports docker.Ports) error {
 	if err != nil {
 		return fmt.Errorf("reading %s: %w", path, err)
 	}
-	return os.WriteFile(path, []byte(rewriteServerXML(string(data), ports)), 0644)
+	return writePreservingMode(path, []byte(rewriteServerXML(string(data), ports)), 0644)
 }
 
 func rewriteServerXML(input string, ports docker.Ports) string {
@@ -159,6 +159,12 @@ var (
 // Stock Liferay's setenv.sh does not set JPDA_ADDRESS at all (catalina.sh
 // defaults it to 8000 when running "jpda start"). For slot > 0 we append our
 // own JPDA_ADDRESS line if none is present, or rewrite whatever is there.
+//
+// The write preserves the existing file's mode so a `chmod g+w setenv.sh`
+// is not silently undone. (Go's os.WriteFile is already a no-op on the
+// perm arg when the file exists, but going through writePreservingMode
+// makes the contract explicit for reviewers and insulates against future
+// changes to Go's open-file semantics.)
 func patchSetenvSh(binDir string, ports docker.Ports) error {
 	path := filepath.Join(binDir, "setenv.sh")
 	data, err := os.ReadFile(path)
@@ -178,7 +184,18 @@ func patchSetenvSh(binDir string, ports docker.Ports) error {
 		content += "\n# Added by liferay-cli: per-slot JPDA debug port.\n" + line + "\n"
 	}
 
-	return os.WriteFile(path, []byte(content), 0755)
+	return writePreservingMode(path, []byte(content), 0755)
+}
+
+// writePreservingMode replaces path's content. For an existing file the
+// existing mode is preserved (regardless of defaultMode); for a new file
+// defaultMode is applied (modulo umask).
+func writePreservingMode(path string, content []byte, defaultMode os.FileMode) error {
+	mode := defaultMode
+	if info, err := os.Stat(path); err == nil {
+		mode = info.Mode().Perm()
+	}
+	return os.WriteFile(path, content, mode)
 }
 
 var jpdaAddressRE = regexp.MustCompile(`(?m)^\s*export\s+JPDA_ADDRESS=.*$`)
