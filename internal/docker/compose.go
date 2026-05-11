@@ -6,8 +6,10 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"os/signal"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"text/template"
 	"time"
 
@@ -327,17 +329,50 @@ func Run(worktreeRoot string, args ...string) error {
 	if err := checkDocker(); err != nil {
 		return err
 	}
-	state, ok := LoadState(worktreeRoot)
+	s, ok := LoadState(worktreeRoot)
 	if !ok {
 		return fmt.Errorf("no Docker state for this worktree — run \"liferay db start\" first")
 	}
 	composePath := ComposePath(worktreeRoot)
-	cmdArgs := append([]string{"compose", "-p", ProjectName(state.Slot), "-f", composePath}, args...)
+	cmdArgs := append([]string{"compose", "-p", ProjectName(s.Slot), "-f", composePath}, args...)
 	cmd := exec.Command("docker", cmdArgs...)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	cmd.Stdin = os.Stdin
-	return cmd.Run()
+
+	if err := cmd.Start(); err != nil {
+		return err
+	}
+	return waitWithSignalForwarding(cmd)
+}
+
+// waitWithSignalForwarding intercepts SIGINT and SIGTERM at the parent and
+// forwards them to the child docker process before waiting for the child
+// to exit. Without this, Go's default signal handling would tear the
+// parent down immediately, orphaning the docker compose subprocess and
+// leaving long-running commands like "db logs -f" stuck in the
+// background after Ctrl-C.
+func waitWithSignalForwarding(cmd *exec.Cmd) error {
+	sigCh := make(chan os.Signal, 1)
+	signal.Notify(sigCh, os.Interrupt, syscall.SIGTERM)
+	defer signal.Stop(sigCh)
+
+	done := make(chan struct{})
+	go func() {
+		for {
+			select {
+			case s := <-sigCh:
+				if cmd.Process != nil {
+					_ = cmd.Process.Signal(s)
+				}
+			case <-done:
+				return
+			}
+		}
+	}()
+	err := cmd.Wait()
+	close(done)
+	return err
 }
 
 // ProjectName is the docker compose -p value derived from a slot.
