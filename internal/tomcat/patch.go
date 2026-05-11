@@ -78,6 +78,20 @@ func rewriteServerXML(input string, ports docker.Ports) string {
 
 	inBlockComment := false
 	inConnector := false
+	var connectorLines []int
+
+	closeConnector := func() {
+		if shouldRewriteConnector(lines, connectorLines) {
+			for _, i := range connectorLines {
+				lines[i] = connectorPortRE.ReplaceAllString(lines[i],
+					fmt.Sprintf(`${1}%d${2}`, ports.TomcatHTTP))
+				lines[i] = redirectPortRE.ReplaceAllString(lines[i],
+					fmt.Sprintf(`redirectPort="%d"`, ports.TomcatRedirect))
+			}
+		}
+		connectorLines = nil
+		inConnector = false
+	}
 
 	for i, raw := range lines {
 		line := raw
@@ -96,36 +110,49 @@ func rewriteServerXML(input string, ports docker.Ports) string {
 		}
 
 		// <Server port="..." shutdown="SHUTDOWN"> — always a single line in
-		// the stock file, exactly one match.
-		line = serverShutdownRE.ReplaceAllString(line,
+		// the stock file, exactly one match. Apply unconditionally; connector
+		// rewriting happens in a deferred batch when the connector closes.
+		lines[i] = serverShutdownRE.ReplaceAllString(line,
 			fmt.Sprintf(`${1}%d${2}`, ports.TomcatShutdown))
 
-		// Track an active <Connector … /> that spans multiple lines so we
-		// can rewrite port= and redirectPort= only inside it.
-		if !inConnector && strings.Contains(line, "<Connector ") {
+		if !inConnector && strings.Contains(lines[i], "<Connector ") {
 			inConnector = true
+			connectorLines = []int{i}
+			if strings.Contains(lines[i], "/>") || strings.Contains(lines[i], "</Connector>") {
+				closeConnector()
+			}
+			continue
 		}
 
 		if inConnector {
-			line = connectorPortRE.ReplaceAllString(line,
-				fmt.Sprintf(`${1}%d${2}`, ports.TomcatHTTP))
-			line = redirectPortRE.ReplaceAllString(line,
-				fmt.Sprintf(`redirectPort="%d"`, ports.TomcatRedirect))
-			if strings.Contains(line, "/>") || strings.Contains(line, "</Connector>") {
-				inConnector = false
+			connectorLines = append(connectorLines, i)
+			if strings.Contains(lines[i], "/>") || strings.Contains(lines[i], "</Connector>") {
+				closeConnector()
 			}
 		}
-
-		lines[i] = line
 	}
 
 	return strings.Join(lines, "\n")
+}
+
+// shouldRewriteConnector returns false when any line of the connector block
+// declares protocol="AJP…", so an enabled AJP connector keeps its declared
+// port instead of getting clobbered to the HTTP port. Stock Liferay leaves
+// AJP commented out, but users who uncomment it expect AJP to keep working.
+func shouldRewriteConnector(lines []string, indices []int) bool {
+	for _, i := range indices {
+		if ajpProtocolRE.MatchString(lines[i]) {
+			return false
+		}
+	}
+	return true
 }
 
 var (
 	serverShutdownRE = regexp.MustCompile(`(<Server\s+port=")\d+(")`)
 	connectorPortRE  = regexp.MustCompile(`(\bport=")\d+(")`)
 	redirectPortRE   = regexp.MustCompile(`redirectPort="\d+"`)
+	ajpProtocolRE    = regexp.MustCompile(`protocol="AJP`)
 )
 
 // patchSetenvSh ensures the JPDA debug port in setenv.sh matches this slot.
