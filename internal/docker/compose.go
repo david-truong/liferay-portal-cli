@@ -1,6 +1,7 @@
 package docker
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -255,18 +256,18 @@ func Setup(worktreeRoot, bundleDir, requestedEngine string) (State, Ports, error
 		return State{}, Ports{}, err
 	}
 
-	state, err := loadOrInitState(stateDir, requestedEngine)
+	s, err := loadOrInitState(stateDir, requestedEngine)
 	if err != nil {
 		return State{}, Ports{}, err
 	}
-	ports := PortsFromSlot(state.Slot)
+	ports := PortsFromSlot(s.Slot)
 
-	if IsDockerManagedEngine(state.Engine) {
+	if IsDockerManagedEngine(s.Engine) {
 		if err := os.MkdirAll(filepath.Join(stateDir, "db", "log"), 0755); err != nil {
 			return State{}, Ports{}, err
 		}
 
-		tmplStr, err := composeTemplateFor(state.Engine)
+		tmplStr, err := composeTemplateFor(s.Engine)
 		if err != nil {
 			return State{}, Ports{}, err
 		}
@@ -275,15 +276,13 @@ func Setup(worktreeRoot, bundleDir, requestedEngine string) (State, Ports, error
 			return State{}, Ports{}, fmt.Errorf("parsing compose template: %w", err)
 		}
 
-		composePath := filepath.Join(stateDir, "docker-compose.yml")
-		f, err := os.Create(composePath)
-		if err != nil {
-			return State{}, Ports{}, fmt.Errorf("creating docker-compose.yml: %w", err)
-		}
-		defer f.Close()
-
-		if err := tmpl.Execute(f, composeParams{Ports: ports}); err != nil {
+		var buf bytes.Buffer
+		if err := tmpl.Execute(&buf, composeParams{Ports: ports}); err != nil {
 			return State{}, Ports{}, fmt.Errorf("rendering compose template: %w", err)
+		}
+		composePath := filepath.Join(stateDir, "docker-compose.yml")
+		if err := state.WriteFileAtomic(composePath, buf.Bytes(), 0644); err != nil {
+			return State{}, Ports{}, fmt.Errorf("writing docker-compose.yml: %w", err)
 		}
 	} else {
 		// hypersonic — remove any stale compose file so "db down/logs/ps" give
@@ -291,11 +290,11 @@ func Setup(worktreeRoot, bundleDir, requestedEngine string) (State, Ports, error
 		_ = os.Remove(filepath.Join(stateDir, "docker-compose.yml"))
 	}
 
-	if err := writePortalExt(bundleDir, state.Engine, ports); err != nil {
+	if err := writePortalExt(bundleDir, s.Engine, ports); err != nil {
 		return State{}, Ports{}, fmt.Errorf("writing portal-ext overrides: %w", err)
 	}
 
-	return state, ports, nil
+	return s, ports, nil
 }
 
 // LoadState returns the persisted state for a worktree, or a zero-value State with
