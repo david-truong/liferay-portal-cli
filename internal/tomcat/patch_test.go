@@ -5,6 +5,7 @@ import (
 	"flag"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -134,6 +135,9 @@ func TestPatchSetenvSh_SingleExistingLine(t *testing.T) {
 }
 
 func TestPatchSetenvSh_PreservesMode(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Windows filesystems don't carry Unix permission bits the way this assertion expects")
+	}
 	binDir := t.TempDir()
 	original := "#!/bin/sh\nexport CATALINA_OPTS=\"-Xmx2g\"\n"
 	path := filepath.Join(binDir, "setenv.sh")

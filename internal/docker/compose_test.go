@@ -9,7 +9,7 @@ import (
 )
 
 func TestLoadOrInitStateCreatesFile(t *testing.T) {
-	t.Setenv("HOME", t.TempDir())
+	home := t.TempDir(); t.Setenv("HOME", home); t.Setenv("USERPROFILE", home)
 	dir := t.TempDir()
 	state, err := loadOrInitState(dir, "")
 	if err != nil {
@@ -33,7 +33,7 @@ func TestLoadOrInitStateCreatesFile(t *testing.T) {
 }
 
 func TestLoadOrInitStateReusesExisting(t *testing.T) {
-	t.Setenv("HOME", t.TempDir())
+	home := t.TempDir(); t.Setenv("HOME", home); t.Setenv("USERPROFILE", home)
 	dir := t.TempDir()
 	existing := State{Slot: 5, Engine: EngineMariaDB}
 	data, _ := json.Marshal(existing)
@@ -54,7 +54,7 @@ func TestLoadOrInitStateReusesExisting(t *testing.T) {
 }
 
 func TestLoadOrInitStateOverridesEngine(t *testing.T) {
-	t.Setenv("HOME", t.TempDir())
+	home := t.TempDir(); t.Setenv("HOME", home); t.Setenv("USERPROFILE", home)
 	dir := t.TempDir()
 	existing := State{Slot: 3, Engine: EngineMySQL}
 	data, _ := json.Marshal(existing)
@@ -75,7 +75,7 @@ func TestLoadOrInitStateOverridesEngine(t *testing.T) {
 }
 
 func TestLoadOrInitStateRejectsUnsupportedEngine(t *testing.T) {
-	t.Setenv("HOME", t.TempDir())
+	home := t.TempDir(); t.Setenv("HOME", home); t.Setenv("USERPROFILE", home)
 	dir := t.TempDir()
 	_, err := loadOrInitState(dir, "oracle")
 	if err == nil {

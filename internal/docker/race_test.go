@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"sync"
 	"testing"
 )
@@ -15,8 +16,12 @@ import (
 //
 // Run with `go test -race` to catch data races on the shared lock/state.
 func TestLoadOrInitState_RaceFreshWorktrees(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("state.Lock is a documented best-effort no-op on Windows; serialization not enforced")
+	}
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
 
 	const n = 8
 	var wg sync.WaitGroup

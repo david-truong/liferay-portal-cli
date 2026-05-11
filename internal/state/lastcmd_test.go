@@ -11,7 +11,7 @@ func writeFile(path, content string) error {
 }
 
 func TestLastCmd_RoundTrip(t *testing.T) {
-	t.Setenv("HOME", t.TempDir())
+	setFakeHome(t, t.TempDir())
 	root := t.TempDir()
 
 	want := LastCmd{
@@ -41,7 +41,7 @@ func TestLastCmd_RoundTrip(t *testing.T) {
 }
 
 func TestLastCmd_LoadCorrupt(t *testing.T) {
-	t.Setenv("HOME", t.TempDir())
+	setFakeHome(t, t.TempDir())
 	root := t.TempDir()
 
 	// Stage a malformed record at the expected path.
@@ -60,7 +60,7 @@ func TestLastCmd_LoadCorrupt(t *testing.T) {
 }
 
 func TestLastCmd_LoadMissing(t *testing.T) {
-	t.Setenv("HOME", t.TempDir())
+	setFakeHome(t, t.TempDir())
 	root := t.TempDir()
 
 	_, ok, err := LoadLastCmd(root)
@@ -73,7 +73,7 @@ func TestLastCmd_LoadMissing(t *testing.T) {
 }
 
 func TestLastCmd_OverwritePrevious(t *testing.T) {
-	t.Setenv("HOME", t.TempDir())
+	setFakeHome(t, t.TempDir())
 	root := t.TempDir()
 
 	first := LastCmd{Kind: LastCmdServer, LogPath: "/var/log/a.log"}

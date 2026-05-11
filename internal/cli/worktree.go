@@ -6,7 +6,6 @@ import (
 	"io"
 	"os"
 	"os/exec"
-	"os/user"
 	"path/filepath"
 	"strings"
 
@@ -197,7 +196,7 @@ type fixAction struct {
 // upstream git ignores. Idempotent — files that already exist get an action
 // of "skipped".
 func ensureWorktreeFiles(primaryRoot, worktreeRoot string) []fixAction {
-	u, err := user.Current()
+	username, err := portal.SafeUsername()
 	if err != nil {
 		return []fixAction{{name: "current-user", action: "failed", note: err.Error()}}
 	}
@@ -243,7 +242,7 @@ func ensureWorktreeFiles(primaryRoot, worktreeRoot string) []fixAction {
 	}
 
 	// app.server.<user>.properties
-	appServerFile := fmt.Sprintf("app.server.%s.properties", u.Username)
+	appServerFile := fmt.Sprintf("app.server.%s.properties", username)
 	appServerDst := filepath.Join(worktreeRoot, appServerFile)
 	if fsutil.Exists(appServerDst) {
 		results = append(results, fixAction{appServerFile, "skipped", "already exists — worktree will use existing server config"})

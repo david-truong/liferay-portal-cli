@@ -19,6 +19,7 @@ func hypersonicWorktree(t *testing.T) string {
 	t.Helper()
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
 
 	portalRoot := t.TempDir()
 	if err := os.WriteFile(filepath.Join(portalRoot, "build.xml"), nil, 0644); err != nil {
