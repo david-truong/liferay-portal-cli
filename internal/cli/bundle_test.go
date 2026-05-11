@@ -3,6 +3,7 @@ package cli
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"testing"
@@ -116,6 +117,9 @@ func TestUnpatchBundle_RestoresPrePatchState(t *testing.T) {
 }
 
 func TestUnpatchBundle_RefusesWhileTomcatRunning(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("tomcat.Status uses Signal(0), which Windows doesn't accept for arbitrary PIDs")
+	}
 	paths, stateDir := fakeBundlePaths(t)
 
 	if err := tomcat.PatchBundle(paths, docker.PortsFromSlot(1)); err != nil {

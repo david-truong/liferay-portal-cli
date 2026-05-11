@@ -161,8 +161,9 @@ func TestFindTomcatDir_ExplicitDir(t *testing.T) {
 	if err != nil {
 		t.Fatalf("FindTomcatDir: %v", err)
 	}
-	if got != "/opt/tomcat-explicit" {
-		t.Errorf("FindTomcatDir = %q, want /opt/tomcat-explicit", got)
+	want := filepath.FromSlash("/opt/tomcat-explicit")
+	if got != want {
+		t.Errorf("FindTomcatDir = %q, want %q", got, want)
 	}
 }
 

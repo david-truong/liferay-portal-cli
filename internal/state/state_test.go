@@ -7,8 +7,16 @@ import (
 	"testing"
 )
 
+// setFakeHome points os.UserHomeDir at dir on every platform. Go reads
+// HOME on Unix and USERPROFILE on Windows, so set both.
+func setFakeHome(t *testing.T, dir string) {
+	t.Helper()
+	t.Setenv("HOME", dir)
+	t.Setenv("USERPROFILE", dir)
+}
+
 func TestDir_DeterministicForSameRoot(t *testing.T) {
-	t.Setenv("HOME", t.TempDir())
+	setFakeHome(t, t.TempDir())
 	root := "/some/abs/path/portal"
 	d1 := Dir(root)
 	d2 := Dir(root)
@@ -18,7 +26,7 @@ func TestDir_DeterministicForSameRoot(t *testing.T) {
 }
 
 func TestDir_DistinctForDifferentRoots(t *testing.T) {
-	t.Setenv("HOME", t.TempDir())
+	setFakeHome(t, t.TempDir())
 	a := Dir("/portal-a")
 	b := Dir("/portal-b")
 	if a == b {
@@ -27,7 +35,7 @@ func TestDir_DistinctForDifferentRoots(t *testing.T) {
 }
 
 func TestDir_DistinctForSameBasenameDifferentPaths(t *testing.T) {
-	t.Setenv("HOME", t.TempDir())
+	setFakeHome(t, t.TempDir())
 	a := Dir("/work/portal")
 	b := Dir("/other/portal")
 	if a == b {
@@ -36,7 +44,7 @@ func TestDir_DistinctForSameBasenameDifferentPaths(t *testing.T) {
 }
 
 func TestDir_RelativePathResolvesToAbsolute(t *testing.T) {
-	t.Setenv("HOME", t.TempDir())
+	setFakeHome(t, t.TempDir())
 	// Relative paths should be made absolute before hashing — otherwise the
 	// state dir would shift with the caller's cwd.
 	abs, err := filepath.Abs("./portal")
@@ -53,7 +61,7 @@ func TestDir_RelativePathResolvesToAbsolute(t *testing.T) {
 func TestRoot_PanicsWhenHomeMissing(t *testing.T) {
 	// Force os.UserHomeDir to fail by unsetting every variable it
 	// consults.
-	t.Setenv("HOME", "")
+	setFakeHome(t, "")
 	t.Setenv("USERPROFILE", "")
 
 	defer func() {
@@ -71,7 +79,7 @@ func TestRoot_PanicsWhenHomeMissing(t *testing.T) {
 
 func TestDir_LivesUnderHome(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	setFakeHome(t, home)
 	got := Dir("/foo/portal")
 	if !strings.HasPrefix(got, filepath.Join(home, ".liferay-cli")) {
 		t.Errorf("Dir should live under $HOME/.liferay-cli, got %q (home=%q)", got, home)
@@ -125,7 +133,7 @@ func TestWriteFileAtomic_OverwritesExisting(t *testing.T) {
 
 func TestDisplayHome_PathUnderHome(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	setFakeHome(t, home)
 
 	p := filepath.Join(home, "Projects", "liferay")
 	got := DisplayHome(p)
@@ -136,7 +144,7 @@ func TestDisplayHome_PathUnderHome(t *testing.T) {
 }
 
 func TestDisplayHome_PathOutsideHome(t *testing.T) {
-	t.Setenv("HOME", t.TempDir())
+	setFakeHome(t, t.TempDir())
 	p := "/var/log/something"
 	got := DisplayHome(p)
 	if got != p {

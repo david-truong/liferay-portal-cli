@@ -4,7 +4,6 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"os/user"
 	"path/filepath"
 	"strings"
 )
@@ -70,8 +69,8 @@ func readAppServerProps(portalRoot string) map[string]string {
 		props = map[string]string{}
 	}
 
-	if u, err := user.Current(); err == nil {
-		override := filepath.Join(portalRoot, "app.server."+u.Username+".properties")
+	if username, err := SafeUsername(); err == nil {
+		override := filepath.Join(portalRoot, "app.server."+username+".properties")
 		if overrideProps, err := ReadProperties(override); err == nil {
 			for k, v := range overrideProps {
 				props[k] = v

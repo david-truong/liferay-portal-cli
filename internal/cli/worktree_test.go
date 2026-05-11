@@ -2,10 +2,11 @@ package cli
 
 import (
 	"os"
-	"os/user"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/david-truong/liferay-portal-cli/internal/portal"
 )
 
 // stageWorktreePair stages a primary + worktree pair of temp dirs and
@@ -82,11 +83,11 @@ func TestEnsureWorktreeFiles_GeneratesAppServerProperties(t *testing.T) {
 
 	results := ensureWorktreeFiles(primary, worktree)
 
-	u, err := user.Current()
+	username, err := portal.SafeUsername()
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := "app.server." + u.Username + ".properties"
+	want := "app.server." + username + ".properties"
 	r, ok := resultByName(results)[want]
 	if !ok {
 		t.Fatalf("%s not in results: %+v", want, results)
@@ -199,11 +200,11 @@ func TestAutofixWorktree_NoOpForPrimary(t *testing.T) {
 	autofixWorktree(root)
 	// Just assert no app.server.<user>.properties was generated, which
 	// would be the visible side-effect if the function ran ensureWorktreeFiles.
-	u, err := user.Current()
+	username, err := portal.SafeUsername()
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := os.Stat(filepath.Join(root, "app.server."+u.Username+".properties")); err == nil {
+	if _, err := os.Stat(filepath.Join(root, "app.server."+username+".properties")); err == nil {
 		t.Error("autofixWorktree should not generate files in a primary checkout")
 	}
 }
