@@ -84,9 +84,12 @@ type Options struct {
 //     real users almost always want the cache jar, not these sources.
 //   - modules/sdk/ holds Liferay's own Gradle plugin sources used to
 //     build the portal — build infra rather than runtime code.
+//   - modules/util/ holds standalone utilities (data migration, dist
+//     packaging, schema dumpers) that ship outside the OSGi container.
 var DefaultExcludeModulePrefixes = []string{
 	"modules/third-party/",
 	"modules/sdk/",
+	"modules/util/",
 }
 
 // Regenerate rewrites portalRoot/.classpath in place, replacing the source
