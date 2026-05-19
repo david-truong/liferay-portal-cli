@@ -86,10 +86,13 @@ type Options struct {
 //     build the portal — build infra rather than runtime code.
 //   - modules/util/ holds standalone utilities (data migration, dist
 //     packaging, schema dumpers) that ship outside the OSGi container.
+//   - modules/test/ holds portal-level test harnesses and fixtures, not
+//     production code paths.
 var DefaultExcludeModulePrefixes = []string{
 	"modules/third-party/",
 	"modules/sdk/",
 	"modules/util/",
+	"modules/test/",
 }
 
 // Regenerate rewrites portalRoot/.classpath in place, replacing the source
