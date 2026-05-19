@@ -27,7 +27,7 @@ func TestParseClasspath_RoundTrip(t *testing.T) {
 		t.Errorf("otherLines=%d, want 2", got)
 	}
 
-	rebuilt := rebuildClasspath(parsed, parsed.srcEntries)
+	rebuilt := rebuildClasspath(parsed, parsed.srcEntries, nil)
 	if string(rebuilt) != input {
 		t.Errorf("round-trip mismatch.\ngot:\n%s\nwant:\n%s", rebuilt, input)
 	}
@@ -104,13 +104,12 @@ func TestRegenerate_AddsModuleSources(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	n, err := Regenerate(dir)
+	stats, err := Regenerate(dir, Options{})
 	if err != nil {
 		t.Fatalf("regenerate: %v", err)
 	}
-	// portal-kernel/src + 2 module subdirs = 3.
-	if n != 3 {
-		t.Errorf("entry count=%d, want 3", n)
+	if stats.SourceEntries != 3 {
+		t.Errorf("SourceEntries=%d, want 3", stats.SourceEntries)
 	}
 
 	got, err := os.ReadFile(filepath.Join(dir, ".classpath"))
@@ -144,7 +143,7 @@ func TestRegenerate_NoChangeWhenAlreadyComplete(t *testing.T) {
 	}
 	infoBefore, _ := os.Stat(path)
 
-	_, err := Regenerate(dir)
+	_, err := Regenerate(dir, Options{})
 	if err != nil {
 		t.Fatalf("regenerate: %v", err)
 	}
