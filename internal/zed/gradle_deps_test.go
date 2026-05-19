@@ -19,9 +19,9 @@ func TestParseDepLine(t *testing.T) {
 			ok:   true,
 		},
 		{
+			// compileJspClasspathTransform isn't an included configuration.
 			line: `	compileJspClasspathTransform group: "com.liferay", name: "com.liferay.gradle.plugins.jasper.jspc", transitive: false, version: "2.0.20"`,
-			want: DeclaredDep{Group: "com.liferay", Artifact: "com.liferay.gradle.plugins.jasper.jspc", Version: "2.0.20"},
-			ok:   true,
+			ok:   false,
 		},
 		{
 			line: `	compileOnly project(":apps:foo:foo-api")`,
@@ -32,8 +32,18 @@ func TestParseDepLine(t *testing.T) {
 			ok:   false, // no version, so fails
 		},
 		{
-			line: `	jspCClasspath group: "${someVar}", name: "tomcat-jasper", version: "10.1.55"`,
-			want: DeclaredDep{Group: "${someVar}", Artifact: "tomcat-jasper", Version: "10.1.55"},
+			// jspCClasspath isn't an included configuration anymore — skip.
+			line: `	jspCClasspath group: "org.apache.tomcat", name: "tomcat-jasper", version: "10.1.55"`,
+			ok:   false,
+		},
+		{
+			// testImplementation isn't included either.
+			line: `	testImplementation group: "junit", name: "junit", version: "4.13.1"`,
+			ok:   false,
+		},
+		{
+			line: `	compileInclude group: "com.liferay", name: "com.liferay.osgi.util", version: "8.1.5"`,
+			want: DeclaredDep{Group: "com.liferay", Artifact: "com.liferay.osgi.util", Version: "8.1.5"},
 			ok:   true,
 		},
 	}
@@ -69,7 +79,7 @@ func TestResolveDepsToJars_ExactVersionPreferred(t *testing.T) {
 	mkJar("g", "a", "2.0", "s2", "a-2.0.jar")
 
 	// Exact requested version.
-	jars, err := ResolveDepsToJars([]DeclaredDep{{Group: "g", Artifact: "a", Version: "1.0"}}, dir, nil)
+	jars, err := ResolveDepsToJars([]DeclaredDep{{Group: "g", Artifact: "a", Version: "1.0"}}, "", dir, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -78,19 +88,19 @@ func TestResolveDepsToJars_ExactVersionPreferred(t *testing.T) {
 	}
 
 	// "default" falls back to highest.
-	jars, _ = ResolveDepsToJars([]DeclaredDep{{Group: "g", Artifact: "a", Version: "default"}}, dir, nil)
+	jars, _ = ResolveDepsToJars([]DeclaredDep{{Group: "g", Artifact: "a", Version: "default"}}, "", dir, nil)
 	if len(jars) != 1 || !strings.HasSuffix(jars[0], "a-2.0.jar") {
 		t.Errorf("default resolution wrong: %v", jars)
 	}
 
 	// Variable interpolation falls back to highest.
-	jars, _ = ResolveDepsToJars([]DeclaredDep{{Group: "g", Artifact: "a", Version: "${someVar}"}}, dir, nil)
+	jars, _ = ResolveDepsToJars([]DeclaredDep{{Group: "g", Artifact: "a", Version: "${someVar}"}}, "", dir, nil)
 	if len(jars) != 1 || !strings.HasSuffix(jars[0], "a-2.0.jar") {
 		t.Errorf("variable resolution wrong: %v", jars)
 	}
 
 	// Missing artifact silently dropped, not an error.
-	jars, _ = ResolveDepsToJars([]DeclaredDep{{Group: "g", Artifact: "missing", Version: "1.0"}}, dir, nil)
+	jars, _ = ResolveDepsToJars([]DeclaredDep{{Group: "g", Artifact: "missing", Version: "1.0"}}, "", dir, nil)
 	if len(jars) != 0 {
 		t.Errorf("expected missing artifact dropped, got: %v", jars)
 	}
@@ -98,6 +108,7 @@ func TestResolveDepsToJars_ExactVersionPreferred(t *testing.T) {
 	// Skip set drops matching artifacts entirely.
 	jars, _ = ResolveDepsToJars(
 		[]DeclaredDep{{Group: "g", Artifact: "a", Version: "1.0"}},
+		"",
 		dir,
 		map[string]bool{"a": true},
 	)

@@ -15,15 +15,26 @@ import (
 // dependency declaration line — group, name, and version — in any order.
 // Liferay's build.gradle files never wrap a single dep across lines, so a
 // per-line regex is enough.
-//
-// We deliberately accept any leading configuration name (compileOnly,
-// testImplementation, jspCClasspath, etc.) because the goal is to surface
-// every jar jdtls might need on its classpath, not to model Gradle scopes.
 var (
 	gradleGroupRE   = regexp.MustCompile(`\bgroup:\s*"([^"]+)"`)
 	gradleNameRE    = regexp.MustCompile(`\bname:\s*"([^"]+)"`)
 	gradleVersionRE = regexp.MustCompile(`\bversion:\s*"([^"]+)"`)
+	gradleConfigRE  = regexp.MustCompile(`^\s*(\w+)\s+`)
 )
+
+// includedConfigurations are the Gradle configuration names whose
+// declarations contribute jars that jdtls needs to resolve symbols in
+// production code. Everything else (test*, jspC*, themeBuilder,
+// targetPlatformBoms, ajc, etc.) bloats the workspace without helping
+// cmd+click navigate from regular Java source.
+var includedConfigurations = map[string]bool{
+	"api":            true,
+	"compile":        true,
+	"compileInclude": true,
+	"compileOnly":    true,
+	"implementation": true,
+	"provided":       true,
+}
 
 // DeclaredDep represents one external dependency declared by a module.
 // Version may be "default" or a Gradle variable interpolation like
@@ -88,11 +99,16 @@ func CollectDeclaredDeps(portalRoot string, excludePrefixes []string) ([]Declare
 }
 
 // parseDepLine extracts group/name/version from a single line. Returns
-// (zero, false) when any of the three is missing — including comment
-// lines, project() refs, and partial declarations.
+// (zero, false) when any of the three is missing, when the configuration
+// name is not in includedConfigurations, or for non-dep lines (comments,
+// project() refs, partial declarations).
 func parseDepLine(line string) (DeclaredDep, bool) {
 	// Cheap early-out: every real dep line has all three attribute names.
 	if !strings.Contains(line, "group:") || !strings.Contains(line, "name:") || !strings.Contains(line, "version:") {
+		return DeclaredDep{}, false
+	}
+	cfg := gradleConfigRE.FindStringSubmatch(line)
+	if len(cfg) < 2 || !includedConfigurations[cfg[1]] {
 		return DeclaredDep{}, false
 	}
 	g := gradleGroupRE.FindStringSubmatch(line)
@@ -104,27 +120,40 @@ func parseDepLine(line string) (DeclaredDep, bool) {
 	return DeclaredDep{Group: g[1], Artifact: n[1], Version: v[1]}, true
 }
 
-// ResolveDepsToJars maps each DeclaredDep to a jar path in the Gradle
-// cache. When the exact declared version is unavailable (e.g., it's
-// "default" or a Gradle variable, or simply not yet cached), the highest
-// cached version of that (group, artifact) is used as a fallback. Deps
-// with no cached version at all are silently dropped — the caller can
-// log the count if useful.
+// ResolveDepsToJars maps each DeclaredDep to a jar path. Liferay's build
+// resolves dependencies across multiple stores, so we walk them in order
+// and accept the first hit per (group, artifact, version):
+//
+//  1. <portalRoot>/.gradle/caches/modules-2/files-2.1 — project-local
+//     Gradle cache. This is where modules' `compileOnly group:...` deps
+//     actually land; the global ~/.gradle/ cache only contains artifacts
+//     pulled by non-portal Gradle projects on this machine.
+//  2. <portalRoot>/.m2 — project-local Maven cache. Holds
+//     com.liferay.portal.kernel-*-SNAPSHOT.jar after a portal build.
+//  3. <portalRoot>/tools/sdk/dist — Liferay's own built dist jars for
+//     sibling-module deps (populated by `ant all`).
+//  4. <userHome>/.gradle/caches/modules-2/files-2.1 — global Gradle
+//     cache, a fallback for anything not in (1).
+//
+// When the exact declared version is unavailable (e.g. "default" or a
+// Gradle variable like ${someVar}), the highest cached version is used
+// as a fallback. Deps with no cached version at all are silently
+// dropped.
 //
 // skipArtifacts is a set of artifact names already present in the
 // committed classpath (typically extracted from lib/*/<name>.jar). Any
 // DeclaredDep whose Artifact appears in the set is dropped before
-// resolution; this prevents jdtls from seeing two versions of the same
-// artifact on its classpath (Liferay's bundled lib jar vs the Gradle
-// cache jar), which can cause it to resolve symbols against the wrong
-// copy.
+// resolution to prevent jdtls from seeing two versions of the same
+// artifact.
 //
 // Returns deduplicated, sorted absolute jar paths.
-func ResolveDepsToJars(deps []DeclaredDep, gradleHome string, skipArtifacts map[string]bool) ([]string, error) {
-	root := filepath.Join(gradleHome, "caches", "modules-2", "files-2.1")
-	if _, err := os.Stat(root); os.IsNotExist(err) {
-		return nil, nil
+func ResolveDepsToJars(deps []DeclaredDep, portalRoot, gradleHome string, skipArtifacts map[string]bool) ([]string, error) {
+	gradleRoots := []string{
+		filepath.Join(portalRoot, ".gradle", "caches", "modules-2", "files-2.1"),
+		filepath.Join(gradleHome, "caches", "modules-2", "files-2.1"),
 	}
+	m2Root := filepath.Join(portalRoot, ".m2")
+	sdkDist := filepath.Join(portalRoot, "tools", "sdk", "dist")
 
 	seen := make(map[string]bool)
 	for _, d := range deps {
@@ -134,8 +163,19 @@ func ResolveDepsToJars(deps []DeclaredDep, gradleHome string, skipArtifacts map[
 		if skipArtifacts[d.Artifact] {
 			continue
 		}
-		artifactDir := filepath.Join(root, d.Group, d.Artifact)
-		jarPath := resolveDepJar(artifactDir, d.Artifact, d.Version)
+		jarPath := ""
+		for _, root := range gradleRoots {
+			if jar := resolveDepJar(filepath.Join(root, d.Group, d.Artifact), d.Artifact, d.Version); jar != "" {
+				jarPath = jar
+				break
+			}
+		}
+		if jarPath == "" {
+			jarPath = resolveMavenJar(m2Root, d.Group, d.Artifact, d.Version)
+		}
+		if jarPath == "" {
+			jarPath = resolveSdkDistJar(sdkDist, d.Artifact)
+		}
 		if jarPath != "" {
 			seen[jarPath] = true
 		}
@@ -147,6 +187,80 @@ func ResolveDepsToJars(deps []DeclaredDep, gradleHome string, skipArtifacts map[
 	}
 	sort.Strings(out)
 	return out, nil
+}
+
+// resolveMavenJar looks up an artifact in a Maven local-repo layout:
+//
+//	<root>/<group-with-slashes>/<artifact>/<version>/<artifact>-<version>.jar
+//
+// Liferay's project-local .m2 directory holds SNAPSHOT builds of
+// portal-kernel and other portal-level artifacts that aren't in the
+// Gradle cache.
+func resolveMavenJar(m2Root, group, artifact, requestedVersion string) string {
+	groupPath := strings.ReplaceAll(group, ".", string(filepath.Separator))
+	artifactDir := filepath.Join(m2Root, groupPath, artifact)
+	useFallback := requestedVersion == "" || requestedVersion == "default" || strings.Contains(requestedVersion, "${")
+	if !useFallback {
+		jar := filepath.Join(artifactDir, requestedVersion, artifact+"-"+requestedVersion+".jar")
+		if info, err := os.Stat(jar); err == nil && !info.IsDir() {
+			return jar
+		}
+	}
+	versions, err := os.ReadDir(artifactDir)
+	if err != nil {
+		return ""
+	}
+	best := ""
+	bestVersion := ""
+	for _, vd := range versions {
+		if !vd.IsDir() {
+			continue
+		}
+		v := vd.Name()
+		jar := filepath.Join(artifactDir, v, artifact+"-"+v+".jar")
+		if info, err := os.Stat(jar); err != nil || info.IsDir() {
+			continue
+		}
+		if best == "" || compareVersions(v, bestVersion) > 0 {
+			best = jar
+			bestVersion = v
+		}
+	}
+	return best
+}
+
+// resolveSdkDistJar searches tools/sdk/dist for a jar whose name starts
+// with the artifact name. Liferay's `ant all` populates this directory
+// with versioned sibling-module jars like
+// `com.liferay.osgi.util-8.1.5.jar`. We match by artifact prefix and
+// pick lexically last (proxy for highest version).
+func resolveSdkDistJar(distDir, artifact string) string {
+	if artifact == "" {
+		return ""
+	}
+	entries, err := os.ReadDir(distDir)
+	if err != nil {
+		return ""
+	}
+	prefix := artifact + "-"
+	var best string
+	for _, e := range entries {
+		name := e.Name()
+		if !strings.HasPrefix(name, prefix) || !strings.HasSuffix(name, ".jar") {
+			continue
+		}
+		// Skip -sources/-javadoc.
+		if strings.HasSuffix(name, "-sources.jar") || strings.HasSuffix(name, "-javadoc.jar") {
+			continue
+		}
+		if name > best {
+			best = name
+		}
+	}
+	if best == "" {
+		return ""
+	}
+	return filepath.Join(distDir, best)
 }
 
 // resolveDepJar tries the requested version first; if unavailable (or if

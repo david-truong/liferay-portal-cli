@@ -154,7 +154,7 @@ func Regenerate(portalRoot string, opts Options) (Stats, error) {
 		// Build the dedupe set from the committed lib entries so we don't
 		// add a second copy of any artifact Liferay already ships.
 		skip := libArtifactNames(parsed.otherLines)
-		jars, err := ResolveDepsToJars(deps, home, skip)
+		jars, err := ResolveDepsToJars(deps, portalRoot, home, skip)
 		if err != nil {
 			return Stats{}, fmt.Errorf("resolve declared deps: %w", err)
 		}
