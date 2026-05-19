@@ -130,6 +130,54 @@ func TestRegenerate_AddsModuleSources(t *testing.T) {
 	}
 }
 
+func TestRegenerate_ExcludesPrefixes(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, ".classpath"), []byte(`<?xml version="1.0" encoding="UTF-8"?>
+<classpath>
+	<classpathentry kind="src" path="modules/third-party/legacy-fork/src/main/java"/>
+	<classpathentry kind="con" path="org.eclipse.jdt.launching.JRE_CONTAINER"/>
+</classpath>
+`), 0644); err != nil {
+		t.Fatal(err)
+	}
+	// Create one keeper and one excluded module.
+	for _, p := range []string{
+		"modules/apps/foo/foo-api",
+		"modules/third-party/some-vendor/vendor-impl",
+		"modules/sdk/gradle-plugins-util",
+	} {
+		base := filepath.Join(dir, filepath.FromSlash(p))
+		if err := os.MkdirAll(filepath.Join(base, "src", "main", "java"), 0755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(base, "bnd.bnd"), []byte("Bundle-SymbolicName: x\n"), 0644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	_, err := Regenerate(dir, Options{
+		ExcludeModulePrefixes: []string{"modules/third-party/", "modules/sdk/"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	got, _ := os.ReadFile(filepath.Join(dir, ".classpath"))
+	out := string(got)
+	if !strings.Contains(out, `modules/apps/foo/foo-api/src/main/java`) {
+		t.Error("keeper module dropped")
+	}
+	for _, banned := range []string{
+		`modules/third-party/legacy-fork`,        // pre-existing entry should be evicted
+		`modules/third-party/some-vendor`,        // new discovery should be skipped
+		`modules/sdk/gradle-plugins-util`,        // new discovery under sdk should be skipped
+	} {
+		if strings.Contains(out, banned) {
+			t.Errorf("excluded path leaked through: %s", banned)
+		}
+	}
+}
+
 func TestRegenerate_NoChangeWhenAlreadyComplete(t *testing.T) {
 	dir := t.TempDir()
 	classpathOrig := `<?xml version="1.0" encoding="UTF-8"?>

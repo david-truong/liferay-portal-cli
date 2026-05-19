@@ -68,6 +68,25 @@ type Options struct {
 	// becomes invisible to status/diff. Off by default for callers that
 	// don't want git side effects (e.g. tests).
 	SkipWorktree bool
+
+	// ExcludeModulePrefixes drops any module whose portal-relative path
+	// starts with one of these prefixes (forward-slash). Used to keep the
+	// jdtls workspace lean by skipping low-value module groups like
+	// modules/third-party/ and modules/sdk/. Paths must use forward
+	// slashes regardless of host OS.
+	ExcludeModulePrefixes []string
+}
+
+// DefaultExcludeModulePrefixes are skipped by default because the modules
+// under them are almost never useful to navigate from production code:
+//
+//   - modules/third-party/ holds vendored forks of upstream libraries;
+//     real users almost always want the cache jar, not these sources.
+//   - modules/sdk/ holds Liferay's own Gradle plugin sources used to
+//     build the portal — build infra rather than runtime code.
+var DefaultExcludeModulePrefixes = []string{
+	"modules/third-party/",
+	"modules/sdk/",
 }
 
 // Regenerate rewrites portalRoot/.classpath in place, replacing the source
@@ -92,12 +111,16 @@ func Regenerate(portalRoot string, opts Options) (Stats, error) {
 	// Drop previously-generated cache lib entries so re-runs don't accumulate.
 	parsed.otherLines = stripGeneratedLibs(parsed.otherLines)
 
-	srcEntries, err := collectModuleSourceEntries(portalRoot)
+	srcEntries, err := collectModuleSourceEntries(portalRoot, opts.ExcludeModulePrefixes)
 	if err != nil {
 		return Stats{}, fmt.Errorf("collect module sources: %w", err)
 	}
 
-	merged := mergeSrcEntries(parsed.srcEntries, srcEntries)
+	// Also evict any existing entries (left over from a prior regen) that
+	// fall under the current exclude list — otherwise excluded prefixes
+	// would persist across runs forever.
+	keptExisting := filterEntries(parsed.srcEntries, opts.ExcludeModulePrefixes)
+	merged := mergeSrcEntries(keptExisting, srcEntries)
 
 	var cacheLines []string
 	if opts.IncludeGradleCache {
@@ -251,8 +274,9 @@ func parseClasspath(data []byte) (*parsedClasspath, error) {
 
 // collectModuleSourceEntries walks every moduleRoot under portalRoot,
 // identifies modules (folders with bnd.bnd), and returns one srcEntry per
-// existing source subdirectory.
-func collectModuleSourceEntries(portalRoot string) ([]srcEntry, error) {
+// existing source subdirectory. Modules whose portal-relative path starts
+// with any excludePrefix are skipped entirely.
+func collectModuleSourceEntries(portalRoot string, excludePrefixes []string) ([]srcEntry, error) {
 	idx, err := portal.BuildModuleIndex(portalRoot)
 	if err != nil {
 		return nil, err
@@ -265,6 +289,9 @@ func collectModuleSourceEntries(portalRoot string) ([]srcEntry, error) {
 			continue
 		}
 		rel = filepath.ToSlash(rel)
+		if hasAnyPrefix(rel+"/", excludePrefixes) {
+			continue
+		}
 		for _, sub := range moduleSourceSubdirs {
 			abs := filepath.Join(modulePath, filepath.FromSlash(sub))
 			if info, err := os.Stat(abs); err == nil && info.IsDir() {
@@ -388,6 +415,33 @@ func stripGeneratedLibs(lines []string) []string {
 		}
 	}
 	return out
+}
+
+// filterEntries returns the subset of entries whose path doesn't fall
+// under any of the given exclude prefixes.
+func filterEntries(entries []srcEntry, excludePrefixes []string) []srcEntry {
+	if len(excludePrefixes) == 0 {
+		return entries
+	}
+	out := make([]srcEntry, 0, len(entries))
+	for _, e := range entries {
+		if hasAnyPrefix(e.path+"/", excludePrefixes) {
+			continue
+		}
+		out = append(out, e)
+	}
+	return out
+}
+
+// hasAnyPrefix reports whether path starts with any of the given prefixes.
+// Used to filter excluded module trees by their portal-relative path.
+func hasAnyPrefix(path string, prefixes []string) bool {
+	for _, p := range prefixes {
+		if strings.HasPrefix(path, p) {
+			return true
+		}
+	}
+	return false
 }
 
 func countMarkers(lines []string) int {

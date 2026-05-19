@@ -22,6 +22,7 @@ regenerate that .classpath so every module's sources are visible to jdtls.`,
 var (
 	zedRegenIncludeCache bool
 	zedRegenSkipWorktree bool
+	zedRegenExcludes     []string
 )
 
 var zedRegenCmd = &cobra.Command{
@@ -63,6 +64,9 @@ func init() {
 		"Append jars from ~/.gradle/caches/modules-2/files-2.1 as lib entries")
 	zedRegenCmd.Flags().BoolVar(&zedRegenSkipWorktree, "skip-worktree", true,
 		"Mark .classpath skip-worktree so git stops surfacing local edits (committed copy unaffected)")
+	zedRegenCmd.Flags().StringSliceVar(&zedRegenExcludes, "exclude",
+		zed.DefaultExcludeModulePrefixes,
+		"Portal-relative path prefixes whose modules should be skipped (repeatable)")
 	zedCmd.AddCommand(zedRegenCmd)
 	zedCmd.AddCommand(zedResetCmd)
 	rootCmd.AddCommand(zedCmd)
@@ -74,8 +78,9 @@ func runZedRegen(cmd *cobra.Command, args []string) error {
 		return err
 	}
 	stats, err := zed.Regenerate(portalRoot, zed.Options{
-		IncludeGradleCache: zedRegenIncludeCache,
-		SkipWorktree:       zedRegenSkipWorktree,
+		IncludeGradleCache:    zedRegenIncludeCache,
+		SkipWorktree:          zedRegenSkipWorktree,
+		ExcludeModulePrefixes: zedRegenExcludes,
 	})
 	if err != nil {
 		return err
