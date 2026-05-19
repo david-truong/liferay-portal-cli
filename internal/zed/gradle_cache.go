@@ -9,10 +9,9 @@ import (
 )
 
 // excludedGroupPrefixes lists Gradle group names whose jars are never used
-// by liferay-portal. Including them just bloats the jdtls workspace index
-// and slows everything down. The user's Gradle cache typically holds these
-// because other Gradle projects (Android, Kotlin tooling) share the same
-// cache directory.
+// by liferay-portal, or whose source already lives in the workspace as a
+// module folder. Including them just bloats the jdtls workspace index and
+// risks creating duplicate-class conflicts on the classpath.
 var excludedGroupPrefixes = []string{
 	"androidx.",
 	"com.android.",
@@ -20,6 +19,12 @@ var excludedGroupPrefixes = []string{
 	"org.jetbrains.kotlin",
 	"org.jetbrains.kotlinx",
 	"com.google.testing.platform",
+	// com.liferay.* artifacts almost always have their source visible in
+	// the workspace under modules/, so adding the resolved jar puts a
+	// second copy of every class on jdtls's classpath and biases symbol
+	// resolution toward the (possibly older) bytecode.
+	"com.liferay.",
+	"com.liferay",
 }
 
 // CollectGradleCacheJars walks the Gradle dependency cache and returns one
