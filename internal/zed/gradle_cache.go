@@ -8,9 +8,24 @@ import (
 	"strings"
 )
 
+// excludedGroupPrefixes lists Gradle group names whose jars are never used
+// by liferay-portal. Including them just bloats the jdtls workspace index
+// and slows everything down. The user's Gradle cache typically holds these
+// because other Gradle projects (Android, Kotlin tooling) share the same
+// cache directory.
+var excludedGroupPrefixes = []string{
+	"androidx.",
+	"com.android.",
+	"com.android",
+	"org.jetbrains.kotlin",
+	"org.jetbrains.kotlinx",
+	"com.google.testing.platform",
+}
+
 // CollectGradleCacheJars walks the Gradle dependency cache and returns one
 // absolute jar path per (group, artifact) pair, picking the highest version
-// when multiple are present. Source and javadoc jars are excluded.
+// when multiple are present. Source and javadoc jars are excluded, as are
+// groups in excludedGroupPrefixes.
 //
 // The cache layout is:
 //
@@ -40,6 +55,9 @@ func CollectGradleCacheJars(gradleHome string) ([]string, error) {
 			continue
 		}
 		groupName := gd.Name()
+		if isExcludedGroup(groupName) {
+			continue
+		}
 		artifactDirs, err := os.ReadDir(filepath.Join(root, groupName))
 		if err != nil {
 			continue
@@ -77,6 +95,15 @@ func CollectGradleCacheJars(gradleHome string) ([]string, error) {
 	}
 	sort.Strings(jars)
 	return jars, nil
+}
+
+func isExcludedGroup(group string) bool {
+	for _, prefix := range excludedGroupPrefixes {
+		if group == prefix || strings.HasPrefix(group, prefix) {
+			return true
+		}
+	}
+	return false
 }
 
 // findJarInVersionDir scans the per-version directory (which contains one or
