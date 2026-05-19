@@ -18,6 +18,7 @@ import (
 	"bytes"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"regexp"
 	"sort"
@@ -48,8 +49,9 @@ var (
 
 // Stats is what Regenerate returns to the caller for logging.
 type Stats struct {
-	SourceEntries int
-	GradleJars    int
+	SourceEntries     int
+	GradleJars        int
+	SkipWorktreeAdded bool // true if we set skip-worktree on this run
 }
 
 // Options controls Regenerate's behavior. The zero value is sensible:
@@ -59,6 +61,13 @@ type Stats struct {
 type Options struct {
 	IncludeGradleCache bool
 	GradleHome         string // defaults to $HOME/.gradle
+
+	// SkipWorktree, when true, runs `git update-index --skip-worktree
+	// .classpath` after writing so git stops surfacing the file as
+	// modified. The committed copy is unaffected; the local edit just
+	// becomes invisible to status/diff. Off by default for callers that
+	// don't want git side effects (e.g. tests).
+	SkipWorktree bool
 }
 
 // Regenerate rewrites portalRoot/.classpath in place, replacing the source
@@ -113,13 +122,69 @@ func Regenerate(portalRoot string, opts Options) (Stats, error) {
 		SourceEntries: len(merged),
 		GradleJars:    len(cacheLines) - countMarkers(cacheLines),
 	}
-	if bytes.Equal(rebuilt, original) {
-		return stats, nil
+	if !bytes.Equal(rebuilt, original) {
+		if err := os.WriteFile(classpathPath, rebuilt, 0644); err != nil {
+			return stats, fmt.Errorf("write .classpath: %w", err)
+		}
 	}
-	if err := os.WriteFile(classpathPath, rebuilt, 0644); err != nil {
-		return stats, fmt.Errorf("write .classpath: %w", err)
+
+	if opts.SkipWorktree {
+		added, err := ensureSkipWorktree(portalRoot, ".classpath")
+		if err != nil {
+			return stats, fmt.Errorf("set skip-worktree: %w", err)
+		}
+		stats.SkipWorktreeAdded = added
 	}
+
 	return stats, nil
+}
+
+// ensureSkipWorktree marks the file skip-worktree in git iff it isn't
+// already. Returns true if this call did the marking, false if it was
+// already set (or the file isn't tracked). Errors are bubbled up so the
+// caller can decide whether to ignore them (e.g. in non-git directories).
+func ensureSkipWorktree(repoDir, relPath string) (bool, error) {
+	// `ls-files -v -- <path>` prints flags as the first character.
+	// "S" means skip-worktree is set; "H" means tracked normally.
+	out, err := runGit(repoDir, "ls-files", "-v", "--", relPath)
+	if err != nil {
+		return false, err
+	}
+	out = strings.TrimSpace(out)
+	if out == "" {
+		// Not tracked — nothing to do.
+		return false, nil
+	}
+	if strings.HasPrefix(out, "S") {
+		return false, nil
+	}
+	if _, err := runGit(repoDir, "update-index", "--skip-worktree", "--", relPath); err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
+// ClearSkipWorktree clears the skip-worktree bit on .classpath and
+// restores it from HEAD. Used by `liferay zed reset` to give users a
+// clean exit path back to the committed state.
+func ClearSkipWorktree(portalRoot string) error {
+	if _, err := runGit(portalRoot, "update-index", "--no-skip-worktree", "--", ".classpath"); err != nil {
+		return fmt.Errorf("clear skip-worktree: %w", err)
+	}
+	if _, err := runGit(portalRoot, "checkout", "HEAD", "--", ".classpath"); err != nil {
+		return fmt.Errorf("restore .classpath from HEAD: %w", err)
+	}
+	return nil
+}
+
+func runGit(dir string, args ...string) (string, error) {
+	cmd := exec.Command("git", args...)
+	cmd.Dir = dir
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return string(out), fmt.Errorf("git %s: %w: %s", strings.Join(args, " "), err, strings.TrimSpace(string(out)))
+	}
+	return string(out), nil
 }
 
 // parsedClasspath holds the line-segmented decomposition of an existing
