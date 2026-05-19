@@ -88,11 +88,20 @@ type Options struct {
 //     packaging, schema dumpers) that ship outside the OSGi container.
 //   - modules/test/ holds portal-level test harnesses and fixtures, not
 //     production code paths.
+//   - modules/aspectj/ holds AspectJ weaving infrastructure, almost
+//     never touched from feature work.
+//   - modules/integrations/ holds glue projects for third-party tools
+//     (Saml, OAuth providers, etc.) that most developers don't navigate.
+//   - modules/frontend-sdk/ holds the JS/CSS SDK toolchain, not Java
+//     navigation surface.
 var DefaultExcludeModulePrefixes = []string{
 	"modules/third-party/",
 	"modules/sdk/",
 	"modules/util/",
 	"modules/test/",
+	"modules/aspectj/",
+	"modules/integrations/",
+	"modules/frontend-sdk/",
 }
 
 // Regenerate rewrites portalRoot/.classpath in place, replacing the source
