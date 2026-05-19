@@ -138,9 +138,13 @@ func Regenerate(portalRoot string, opts Options) (Stats, error) {
 			}
 			home = filepath.Join(h, ".gradle")
 		}
-		jars, err := CollectGradleCacheJars(home)
+		deps, err := CollectDeclaredDeps(portalRoot, opts.ExcludeModulePrefixes)
 		if err != nil {
-			return Stats{}, fmt.Errorf("collect gradle cache jars: %w", err)
+			return Stats{}, fmt.Errorf("collect declared deps: %w", err)
+		}
+		jars, err := ResolveDepsToJars(deps, home)
+		if err != nil {
+			return Stats{}, fmt.Errorf("resolve declared deps: %w", err)
 		}
 		cacheLines = renderGradleCacheLibs(jars)
 	}
