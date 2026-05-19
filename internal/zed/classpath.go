@@ -151,7 +151,10 @@ func Regenerate(portalRoot string, opts Options) (Stats, error) {
 		if err != nil {
 			return Stats{}, fmt.Errorf("collect declared deps: %w", err)
 		}
-		jars, err := ResolveDepsToJars(deps, home)
+		// Build the dedupe set from the committed lib entries so we don't
+		// add a second copy of any artifact Liferay already ships.
+		skip := libArtifactNames(parsed.otherLines)
+		jars, err := ResolveDepsToJars(deps, home, skip)
 		if err != nil {
 			return Stats{}, fmt.Errorf("resolve declared deps: %w", err)
 		}
@@ -432,6 +435,29 @@ func stripGeneratedLibs(lines []string) []string {
 		case !skipping:
 			out = append(out, line)
 		}
+	}
+	return out
+}
+
+// libArtifactNames extracts the artifact name (jar basename without the
+// .jar suffix) from every committed `<classpathentry kind="lib"
+// path="lib/.../<name>.jar"/>` line. Liferay's lib/development/ and
+// lib/portal/ jars are named without a version suffix, so the stem maps
+// 1:1 to a Gradle artifact name (e.g. lib/development/spring-core.jar
+// matches the spring-core Gradle artifact). Returned as a set for O(1)
+// lookup during cache resolution.
+var libPathRE = regexp.MustCompile(`path="(lib/[^"]+\.jar)"`)
+
+func libArtifactNames(otherLines []string) map[string]bool {
+	out := make(map[string]bool)
+	for _, line := range otherLines {
+		m := libPathRE.FindStringSubmatch(line)
+		if len(m) < 2 {
+			continue
+		}
+		base := filepath.Base(m[1])
+		stem := strings.TrimSuffix(base, ".jar")
+		out[stem] = true
 	}
 	return out
 }

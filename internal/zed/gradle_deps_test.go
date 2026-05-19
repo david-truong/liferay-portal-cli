@@ -69,7 +69,7 @@ func TestResolveDepsToJars_ExactVersionPreferred(t *testing.T) {
 	mkJar("g", "a", "2.0", "s2", "a-2.0.jar")
 
 	// Exact requested version.
-	jars, err := ResolveDepsToJars([]DeclaredDep{{Group: "g", Artifact: "a", Version: "1.0"}}, dir)
+	jars, err := ResolveDepsToJars([]DeclaredDep{{Group: "g", Artifact: "a", Version: "1.0"}}, dir, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -78,21 +78,31 @@ func TestResolveDepsToJars_ExactVersionPreferred(t *testing.T) {
 	}
 
 	// "default" falls back to highest.
-	jars, _ = ResolveDepsToJars([]DeclaredDep{{Group: "g", Artifact: "a", Version: "default"}}, dir)
+	jars, _ = ResolveDepsToJars([]DeclaredDep{{Group: "g", Artifact: "a", Version: "default"}}, dir, nil)
 	if len(jars) != 1 || !strings.HasSuffix(jars[0], "a-2.0.jar") {
 		t.Errorf("default resolution wrong: %v", jars)
 	}
 
 	// Variable interpolation falls back to highest.
-	jars, _ = ResolveDepsToJars([]DeclaredDep{{Group: "g", Artifact: "a", Version: "${someVar}"}}, dir)
+	jars, _ = ResolveDepsToJars([]DeclaredDep{{Group: "g", Artifact: "a", Version: "${someVar}"}}, dir, nil)
 	if len(jars) != 1 || !strings.HasSuffix(jars[0], "a-2.0.jar") {
 		t.Errorf("variable resolution wrong: %v", jars)
 	}
 
 	// Missing artifact silently dropped, not an error.
-	jars, _ = ResolveDepsToJars([]DeclaredDep{{Group: "g", Artifact: "missing", Version: "1.0"}}, dir)
+	jars, _ = ResolveDepsToJars([]DeclaredDep{{Group: "g", Artifact: "missing", Version: "1.0"}}, dir, nil)
 	if len(jars) != 0 {
 		t.Errorf("expected missing artifact dropped, got: %v", jars)
+	}
+
+	// Skip set drops matching artifacts entirely.
+	jars, _ = ResolveDepsToJars(
+		[]DeclaredDep{{Group: "g", Artifact: "a", Version: "1.0"}},
+		dir,
+		map[string]bool{"a": true},
+	)
+	if len(jars) != 0 {
+		t.Errorf("skipArtifacts ignored, got: %v", jars)
 	}
 }
 

@@ -111,8 +111,16 @@ func parseDepLine(line string) (DeclaredDep, bool) {
 // with no cached version at all are silently dropped — the caller can
 // log the count if useful.
 //
+// skipArtifacts is a set of artifact names already present in the
+// committed classpath (typically extracted from lib/*/<name>.jar). Any
+// DeclaredDep whose Artifact appears in the set is dropped before
+// resolution; this prevents jdtls from seeing two versions of the same
+// artifact on its classpath (Liferay's bundled lib jar vs the Gradle
+// cache jar), which can cause it to resolve symbols against the wrong
+// copy.
+//
 // Returns deduplicated, sorted absolute jar paths.
-func ResolveDepsToJars(deps []DeclaredDep, gradleHome string) ([]string, error) {
+func ResolveDepsToJars(deps []DeclaredDep, gradleHome string, skipArtifacts map[string]bool) ([]string, error) {
 	root := filepath.Join(gradleHome, "caches", "modules-2", "files-2.1")
 	if _, err := os.Stat(root); os.IsNotExist(err) {
 		return nil, nil
@@ -121,6 +129,9 @@ func ResolveDepsToJars(deps []DeclaredDep, gradleHome string) ([]string, error) 
 	seen := make(map[string]bool)
 	for _, d := range deps {
 		if isExcludedGroup(d.Group) {
+			continue
+		}
+		if skipArtifacts[d.Artifact] {
 			continue
 		}
 		artifactDir := filepath.Join(root, d.Group, d.Artifact)
