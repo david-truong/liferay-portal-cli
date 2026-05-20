@@ -7,6 +7,12 @@ import (
 	"testing"
 )
 
+// pathHasSuffix is HasSuffix that normalizes both sides to forward slashes
+// so test assertions work the same on Windows and Unix.
+func pathHasSuffix(s, suffix string) bool {
+	return strings.HasSuffix(filepath.ToSlash(s), suffix)
+}
+
 func TestCompareVersions(t *testing.T) {
 	cases := []struct {
 		a, b string
@@ -56,7 +62,7 @@ func TestCollectGradleCacheJars_PicksHighestVersion(t *testing.T) {
 	if len(jars) != 1 {
 		t.Fatalf("got %d jars, want 1: %v", len(jars), jars)
 	}
-	if !strings.HasSuffix(jars[0], "/spring-core/6.0.0/sha3/spring-core-6.0.0.jar") {
+	if !pathHasSuffix(jars[0], "/spring-core/6.0.0/sha3/spring-core-6.0.0.jar") {
 		t.Errorf("picked wrong jar: %s", jars[0])
 	}
 }
