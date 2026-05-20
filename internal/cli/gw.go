@@ -27,6 +27,14 @@ func init() {
 }
 
 func runGw(cmd *cobra.Command, args []string) error {
+	gf, args, err := parseGlobalFlags(args)
+	if err != nil {
+		return err
+	}
+	if err := applyGlobalFlags(gf); err != nil {
+		return err
+	}
+
 	if len(args) == 0 || args[0] == "--help" || args[0] == "-h" {
 		return cmd.Help()
 	}
