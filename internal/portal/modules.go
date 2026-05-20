@@ -89,6 +89,24 @@ func addModule(idx *ModuleIndex, absPath string) {
 	idx.bySuffix[suffix] = appendUnique(idx.bySuffix[suffix], absPath)
 }
 
+// AllPaths returns every discovered module's absolute path in sorted order.
+// Useful for callers (e.g. classpath generation) that need to iterate the
+// full set rather than look up a single name.
+func (idx *ModuleIndex) AllPaths() []string {
+	seen := make(map[string]bool)
+	for _, paths := range idx.byName {
+		for _, p := range paths {
+			seen[p] = true
+		}
+	}
+	out := make([]string, 0, len(seen))
+	for p := range seen {
+		out = append(out, p)
+	}
+	sort.Strings(out)
+	return out
+}
+
 // Resolve returns the absolute path for the named module.
 func (idx *ModuleIndex) Resolve(name string) (string, error) {
 	if strings.Contains(name, "/") {
