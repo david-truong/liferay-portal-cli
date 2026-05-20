@@ -5,12 +5,35 @@ All notable changes to `liferay-portal-cli` will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## Unreleased
+## [v1.0.0] - 2026-05-19
 
 The production-readiness pass that closes the four audit blockers
-identified in `tasks/liferay-portal-cli-production-readiness-audit.md`.
+identified in `tasks/liferay-portal-cli-production-readiness-audit.md`,
+plus a Zed editor integration that makes jdtls resolve symbols across
+the full liferay-portal source tree.
 
-### Added
+### Added — Zed editor support
+
+- `liferay zed regen` rewrites the portal-root `.classpath` so jdtls
+  (the language server backing Zed's Java support) sees every module's
+  source folders plus the external jars declared in module
+  `build.gradle` files. The committed file only lists ~28 of the 1000+
+  modules; without this, cmd+click fails on most Liferay code.
+- `liferay zed reset` clears `skip-worktree` and restores `.classpath`
+  from `HEAD` — clean exit path for sharing a tree.
+- `--include-gradle-cache` / `--no-include-gradle-cache` toggles the
+  external-jar resolution step. Resolves against Liferay's project-local
+  stores (`<portalRoot>/.gradle/caches`, `.m2/`, `tools/sdk/dist/`) and
+  the global `~/.gradle/` as a fallback.
+- `--exclude` (repeatable) drops module trees from indexing. Defaults
+  to `modules/{third-party,sdk,util,test,aspectj,integrations,frontend-sdk}/`.
+- `--skip-worktree` (default on) marks `.classpath` skip-worktree after
+  rewrite so git stops surfacing local edits.
+- `com.liferay.*` and Android/Kotlin tooling group prefixes are skipped
+  during Gradle-cache resolution; their source already lives in the
+  workspace (or isn't used by Liferay).
+
+### Added — production-readiness
 
 - `LICENSE` (MIT), `CONTRIBUTING.md`, `SECURITY.md`, `CHANGELOG.md` at
   repo root.
