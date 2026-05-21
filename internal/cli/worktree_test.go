@@ -99,7 +99,7 @@ func TestEnsureWorktreeFiles_GeneratesAppServerProperties(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(string(content), "app.server.parent.dir=${project.dir}/bundles") {
+	if !strings.Contains(string(content), "app.server.parent.dir=${project.dir}/.bundles") {
 		t.Errorf("expected app.server.parent.dir override, got:\n%s", content)
 	}
 }
@@ -109,7 +109,7 @@ func TestEnsureWorktreeFiles_GeneratesSetupWizard(t *testing.T) {
 
 	results := ensureWorktreeFiles(primary, worktree)
 
-	want := filepath.Join("bundles", "portal-setup-wizard.properties")
+	want := filepath.Join(".bundles", "portal-setup-wizard.properties")
 	r, ok := resultByName(results)[want]
 	if !ok {
 		t.Fatalf("%s not in results: %+v", want, results)

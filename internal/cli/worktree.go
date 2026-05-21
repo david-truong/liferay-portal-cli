@@ -15,6 +15,13 @@ import (
 	"github.com/spf13/cobra"
 )
 
+// bundleSubdirName is the per-worktree subdirectory that holds the deployed
+// Liferay bundle (Tomcat install, OSGi runtime, data). The dot prefix lets
+// users add ".bundles/" to a global gitignore (core.excludesFile) and have
+// it disappear from `git status` everywhere without touching the portal
+// repo's tracked .gitignore.
+const bundleSubdirName = ".bundles"
+
 var worktreeCmd = &cobra.Command{
 	Use:     "worktree",
 	Aliases: []string{"wt"},
@@ -34,8 +41,8 @@ required for Liferay development:
     build.*.properties, test.*.properties, release.*.properties, .env
 
   Generated:
-    app.server.<user>.properties       — points bundles/ inside the worktree
-    bundles/portal-setup-wizard.properties — skips setup wizard on first boot
+    app.server.<user>.properties              — points .bundles/ inside the worktree
+    .bundles/portal-setup-wizard.properties   — skips setup wizard on first boot
 
 By default, runs "ant all" after creating the worktree to populate the bundle
 directory. Pass --skip-build to skip this step (you'll need to run
@@ -247,16 +254,16 @@ func ensureWorktreeFiles(primaryRoot, worktreeRoot string) []fixAction {
 	if fsutil.Exists(appServerDst) {
 		results = append(results, fixAction{appServerFile, "skipped", "already exists — worktree will use existing server config"})
 	} else {
-		content := "app.server.parent.dir=${project.dir}/bundles\n"
+		content := "app.server.parent.dir=${project.dir}/" + bundleSubdirName + "\n"
 		if err := os.WriteFile(appServerDst, []byte(content), 0644); err != nil {
 			results = append(results, fixAction{appServerFile, "failed", err.Error()})
 		} else {
-			results = append(results, fixAction{appServerFile, "generated", "bundles/ will be inside this worktree"})
+			results = append(results, fixAction{appServerFile, "generated", bundleSubdirName + "/ will be inside this worktree"})
 		}
 	}
 
-	// bundles/portal-setup-wizard.properties
-	setupWizardRel := filepath.Join("bundles", "portal-setup-wizard.properties")
+	// <bundle>/portal-setup-wizard.properties
+	setupWizardRel := filepath.Join(bundleSubdirName, "portal-setup-wizard.properties")
 	setupWizardDst := filepath.Join(worktreeRoot, setupWizardRel)
 	if fsutil.Exists(setupWizardDst) {
 		results = append(results, fixAction{setupWizardRel, "skipped", "already exists"})
@@ -269,7 +276,7 @@ func ensureWorktreeFiles(primaryRoot, worktreeRoot string) []fixAction {
 			"company.default.time.zone=UTC\n" +
 			"company.default.web.id=liferay.com\n" +
 			"default.admin.email.address.prefix=test\n" +
-			"liferay.home=" + filepath.Join(worktreeRoot, "bundles") + "\n" +
+			"liferay.home=" + filepath.Join(worktreeRoot, bundleSubdirName) + "\n" +
 			"setup.wizard.enabled=false\n"
 		if err := os.WriteFile(setupWizardDst, []byte(content), 0644); err != nil {
 			results = append(results, fixAction{setupWizardRel, "failed", err.Error()})
@@ -330,7 +337,7 @@ func runWorktreeRemove(cmd *cobra.Command, args []string) error {
 // touches the bundle directory.
 func removeWorktree(absTarget string, assumeYes bool, in io.Reader, out io.Writer, isTTY bool) error {
 	if !confirmWithIO(
-		fmt.Sprintf("This will remove the git worktree at %s along with its bundles/ and CLI state directories.", absTarget),
+		fmt.Sprintf("This will remove the git worktree at %s along with its %s/ and CLI state directories.", absTarget, bundleSubdirName),
 		assumeYes, in, out, isTTY,
 	) {
 		return ExitErr(ExitConfirmationDeclined,
@@ -338,7 +345,7 @@ func removeWorktree(absTarget string, assumeYes bool, in io.Reader, out io.Write
 	}
 
 	stateDir := state.Dir(absTarget)
-	bundleDir := filepath.Join(absTarget, "bundles")
+	bundleDir := filepath.Join(absTarget, bundleSubdirName)
 
 	if err := gitRun("worktree", "remove", absTarget); err != nil {
 		return err
