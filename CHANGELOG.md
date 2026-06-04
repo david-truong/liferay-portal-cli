@@ -5,6 +5,22 @@ All notable changes to `liferay-portal-cli` will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added — friendly per-worktree hostnames
+
+- `liferay hosts add [name]` maps a hostname to `127.0.0.1` in `/etc/hosts`
+  for the current worktree (default name derived from the worktree directory),
+  so a slot can be browsed as `http://lpd-12345:8090` instead of
+  `http://localhost:8090`. Managed lines carry a `# liferay-cli <worktree-id>`
+  marker, so the operation is idempotent and leaves other entries untouched.
+- `liferay hosts remove` drops the current worktree's entry; `liferay hosts list`
+  shows every managed entry.
+- Editing `/etc/hosts` needs root: the command writes the file directly when it
+  has permission (e.g. under `sudo`) and otherwise prints an idempotent `sudo`
+  one-liner to paste. When invoked via `sudo`, `$HOME` is re-rooted to the
+  invoking user so slot/port lookups resolve under the real user's state.
+
 ## [v1.0.0] - 2026-05-19
 
 The production-readiness pass that closes the four audit blockers

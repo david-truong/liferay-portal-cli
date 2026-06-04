@@ -40,6 +40,19 @@ func Dir(worktreeRoot string) string {
 	return filepath.Join(Root(), "worktrees", id)
 }
 
+// ID returns the stable per-worktree identifier (basename + path hash) used as
+// the directory name under ~/.liferay-cli/worktrees/. Unlike Dir, the value
+// depends only on the absolute worktree path, not on the home directory, so it
+// is safe to use as a marker that stays stable across a `sudo` invocation.
+func ID(worktreeRoot string) string {
+	abs, err := filepath.Abs(worktreeRoot)
+	if err != nil {
+		abs = worktreeRoot
+	}
+	sum := sha1.Sum([]byte(abs))
+	return filepath.Base(abs) + "-" + hex.EncodeToString(sum[:4])
+}
+
 // WriteFileAtomic writes data to path via a temp file + rename so concurrent
 // readers always see either the old or new content, never a torn write.
 func WriteFileAtomic(path string, data []byte, mode os.FileMode) error {

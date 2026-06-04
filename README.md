@@ -53,6 +53,7 @@ This drops a `liferay` binary into `$(go env GOPATH)/bin`. Make sure that direct
 | `liferay db <up\|down\|logs\|ps\|restart> [--engine mysql\|mariadb\|postgres\|hypersonic]` | Manage the per-worktree database stack |
 | `liferay server <start\|stop\|restart\|run\|status\|logs\|wipe>` | Manage the host-native Tomcat bundle |
 | `liferay omni-admin <install\|uninstall>` | Install/remove dev-only omni-admin bundles (auto-login, no-captcha, forgiving store) |
+| `liferay hosts <add\|remove\|list>` | Manage a friendly `/etc/hosts` name for this worktree (maps to 127.0.0.1) |
 
 ---
 
@@ -315,6 +316,43 @@ liferay omni-admin uninstall   # remove them
 ```
 
 These bundles bypass authentication and validation. Never install on a shared or production bundle.
+
+### `liferay hosts`
+
+Gives a worktree a friendly hostname so you can browse it as
+`http://lpd-12345:8090` instead of `http://localhost:8090`. Each entry is a line
+in `/etc/hosts` mapping the name to `127.0.0.1`, tagged with a
+`# liferay-cli <worktree-id>` marker so add/remove stay idempotent and never
+touch other entries. The hostname is a label — every worktree still resolves to
+loopback, so the per-slot Tomcat port (see [Slots](#slots-running-multiple-liferay-instances-side-by-side))
+is what actually distinguishes instances.
+
+```sh
+liferay hosts add              # map a name from the worktree dir, e.g. lpd-12345
+liferay hosts add demo.test    # map an explicit name
+liferay hosts remove           # drop this worktree's entry
+liferay hosts list             # show all liferay-cli-managed entries
+```
+
+Editing `/etc/hosts` needs root. Run the command directly and it writes the file
+if it already has permission (e.g. under `sudo`); otherwise it prints a ready-to-paste,
+idempotent `sudo` one-liner instead of writing the file:
+
+```
+$ liferay hosts add
+Editing /etc/hosts needs root. Run:
+
+  sudo sh -c "sed -i.bak '/# liferay-cli lpd-12345-ab12cd34$/d' /etc/hosts && printf '127.0.0.1\tlpd-12345\t# liferay-cli lpd-12345-ab12cd34\n' >> /etc/hosts"
+
+Then browse http://lpd-12345:8090
+```
+
+Two Liferay notes when using a non-`localhost` name:
+
+- Avoid the `.local` suffix on macOS — it's reserved for mDNS/Bonjour and resolves
+  slowly. Prefer `.test` (guaranteed non-routable) or a bare label.
+- Tell Liferay the host is valid or it redirects back to `localhost`. In the
+  bundle's `portal-ext.properties`: `virtual.hosts.valid.hosts=*`.
 
 ## Release
 
