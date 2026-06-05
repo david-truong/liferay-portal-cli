@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed — `server status` text output
+
+- `liferay server status` now prints a multiline summary showing pid, slot,
+  HTTP port, JPDA port, and bundle directory in addition to the liveness
+  headline. The `--json` schema is unchanged.
+
 ### Added — friendly per-worktree hostnames
 
 - `liferay hosts add [name]` maps a hostname to `127.0.0.1` in `/etc/hosts`

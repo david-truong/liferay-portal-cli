@@ -176,20 +176,36 @@ func runServerStatus(_ *cobra.Command, _ []string) error {
 	}
 	pid, alive := tomcat.Status(paths)
 
+	worktreeRoot, _ := findWorktreeRoot()
+	dockerState, _ := docker.LoadState(worktreeRoot)
+
 	if serverStatusJSON {
-		worktreeRoot, _ := findWorktreeRoot()
-		dockerState, _ := docker.LoadState(worktreeRoot)
 		return serverStatusJSONOutput(paths, dockerState, pid, alive, os.Stdout)
 	}
+	return serverStatusTextOutput(paths, dockerState, pid, alive, os.Stdout)
+}
 
-	if alive {
-		fmt.Printf("running (pid %d)\n", pid)
-		return nil
+// serverStatusTextOutput is the testable text emitter. Headline reflects
+// liveness; the body shows pid, slot, configured ports, and bundle path so
+// the reader can act on the result without a second command.
+func serverStatusTextOutput(paths tomcat.Paths, st docker.State, pid int, alive bool, out io.Writer) error {
+	ports := docker.PortsFromSlot(st.Slot)
+
+	switch {
+	case alive:
+		fmt.Fprintln(out, "running")
+		fmt.Fprintf(out, "  pid:    %d\n", pid)
+	case pid > 0:
+		fmt.Fprintln(out, "stale pid file")
+		fmt.Fprintf(out, "  pid:    %d (no longer alive)\n", pid)
+	default:
+		fmt.Fprintln(out, "not running")
 	}
-	if pid > 0 {
-		fmt.Printf("stale pid file (pid %d no longer alive)\n", pid)
-	} else {
-		fmt.Printf("not running\n")
+	fmt.Fprintf(out, "  slot:   %d\n", st.Slot)
+	fmt.Fprintf(out, "  port:   %d\n", ports.TomcatHTTP)
+	fmt.Fprintf(out, "  jpda:   %d\n", ports.JPDA)
+	if paths.Bundle != "" {
+		fmt.Fprintf(out, "  bundle: %s\n", paths.Bundle)
 	}
 	return nil
 }
