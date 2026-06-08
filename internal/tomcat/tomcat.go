@@ -10,6 +10,7 @@ import (
 	"strconv"
 	"strings"
 	"syscall"
+	"time"
 
 	"github.com/david-truong/liferay-portal-cli/internal/portal"
 	"github.com/david-truong/liferay-portal-cli/internal/state"
@@ -144,6 +145,64 @@ func Wipe(paths Paths) []string {
 		removed = append(removed, t)
 	}
 	return removed
+}
+
+// ForceStop kills the Tomcat recorded in pidFile when catalina.sh is no
+// longer available (the bundle was deleted with its worktree). It reads the
+// PID, confirms the process is alive AND that its command line references
+// expectedCatalinaBase — this guards against killing an unrelated process
+// that inherited a recycled PID — then sends SIGTERM, escalating to SIGKILL
+// if the process does not exit. Returns (false, nil) when nothing is running.
+// Returns (false, err) when the PID is alive but does not look like this
+// slot's Tomcat, so the caller can warn and leave it untouched.
+func ForceStop(pidFile, expectedCatalinaBase string) (bool, error) {
+	data, err := os.ReadFile(pidFile)
+	if err != nil {
+		return false, nil
+	}
+	pid, err := strconv.Atoi(strings.TrimSpace(string(data)))
+	if err != nil || pid <= 0 || !processAlive(pid) {
+		return false, nil
+	}
+
+	if cmdline, ok := processCommandLine(pid); ok &&
+		!strings.Contains(cmdline, expectedCatalinaBase) {
+
+		return false, fmt.Errorf(
+			"pid %d is alive but does not reference %s (possible PID reuse); leaving it running",
+			pid, expectedCatalinaBase)
+	}
+
+	proc, err := os.FindProcess(pid)
+	if err != nil {
+		return false, nil
+	}
+	_ = proc.Signal(syscall.SIGTERM)
+
+	for i := 0; i < 100; i++ {
+		if !processAlive(pid) {
+			return true, nil
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	if err := proc.Signal(syscall.SIGKILL); err != nil {
+		return false, fmt.Errorf("SIGKILL pid %d: %w", pid, err)
+	}
+	return true, nil
+}
+
+// processCommandLine returns the full command line of pid via ps. ok is false
+// when ps is unavailable (e.g. Windows) so callers fall back to killing
+// without the PID-reuse guard rather than refusing to act.
+func processCommandLine(pid int) (string, bool) {
+	if runtime.GOOS == "windows" {
+		return "", false
+	}
+	out, err := exec.Command("ps", "-p", strconv.Itoa(pid), "-o", "command=").Output()
+	if err != nil {
+		return "", false
+	}
+	return string(out), true
 }
 
 func processAlive(pid int) bool {

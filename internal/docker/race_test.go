@@ -37,7 +37,7 @@ func TestLoadOrInitState_RaceFreshWorktrees(t *testing.T) {
 				errs[i] = fmt.Errorf("mkdir: %w", err)
 				return
 			}
-			s, err := loadOrInitState(stateDir, "mysql")
+			s, err := loadOrInitState(stateDir, "mysql", stateDir)
 			if err != nil {
 				errs[i] = err
 				return

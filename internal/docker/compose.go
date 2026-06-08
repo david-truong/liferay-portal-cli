@@ -13,6 +13,7 @@ import (
 	"text/template"
 	"time"
 
+	"github.com/david-truong/liferay-portal-cli/internal/fsutil"
 	"github.com/david-truong/liferay-portal-cli/internal/state"
 )
 
@@ -238,6 +239,13 @@ type composeParams struct {
 type State struct {
 	Slot   int    `json:"slot"`
 	Engine string `json:"engine,omitempty"`
+
+	// WorktreePath is the absolute path of the worktree this state belongs
+	// to. Recorded on every write so a deleted worktree's slot can be
+	// detected (path no longer exists) and reclaimed. Empty for state
+	// written by older CLI versions; such legacy claims are resolved by
+	// hash reconstruction in claims.go instead.
+	WorktreePath string `json:"worktreePath,omitempty"`
 }
 
 // StateDir returns the path to the per-worktree CLI state directory. State
@@ -258,7 +266,7 @@ func Setup(worktreeRoot, bundleDir, requestedEngine string) (State, Ports, error
 		return State{}, Ports{}, err
 	}
 
-	s, err := loadOrInitState(stateDir, requestedEngine)
+	s, err := loadOrInitState(stateDir, requestedEngine, worktreeRoot)
 	if err != nil {
 		return State{}, Ports{}, err
 	}
@@ -346,6 +354,28 @@ func Run(worktreeRoot string, args ...string) error {
 	return waitWithSignalForwarding(cmd)
 }
 
+// StopStack tears down a slot's Docker stack directly from its state
+// directory, without needing the (possibly deleted) worktree. Used by
+// "liferay worktree prune" to stop containers a stranded slot left running.
+// No-op when the state dir has no docker-compose.yml (e.g. hypersonic) or
+// Docker is unavailable. The project name is slot-derived so only that
+// slot's containers are touched.
+func StopStack(stateDir string, slot int) error {
+	composePath := filepath.Join(stateDir, "docker-compose.yml")
+	if !fsutil.Exists(composePath) {
+		return nil
+	}
+	if err := checkDocker(); err != nil {
+		return err
+	}
+	cmd := exec.Command(
+		"docker", "compose", "-p", ProjectName(slot), "-f", composePath,
+		"down", "--remove-orphans")
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	return cmd.Run()
+}
+
 // waitWithSignalForwarding intercepts SIGINT and SIGTERM at the parent and
 // forwards them to the child docker process before waiting for the child
 // to exit. Without this, Go's default signal handling would tear the
@@ -391,7 +421,7 @@ func ProjectName(slot int) string {
 // every other worktree's persisted ports.json — that way the second
 // worktree picks slot 1 even if it boots before the first has run
 // `docker compose up` (i.e. before slot 0's host ports are actually bound).
-func loadOrInitState(stateDir, requestedEngine string) (State, error) {
+func loadOrInitState(stateDir, requestedEngine, worktreeRoot string) (State, error) {
 	if requestedEngine != "" && !IsSupportedEngine(requestedEngine) {
 		return State{}, fmt.Errorf("unsupported engine %q (want one of: %s)",
 			requestedEngine, strings.Join(SupportedEngines, ", "))
@@ -418,6 +448,11 @@ func loadOrInitState(stateDir, requestedEngine string) (State, error) {
 	}
 	if requestedEngine != "" {
 		s.Engine = requestedEngine
+	}
+	if abs, err := filepath.Abs(worktreeRoot); err == nil {
+		s.WorktreePath = abs
+	} else {
+		s.WorktreePath = worktreeRoot
 	}
 
 	data, err := json.Marshal(s)
@@ -475,9 +510,18 @@ func claimedSlots(selfStateDir string) map[int]bool {
 			continue
 		}
 		var s State
-		if json.Unmarshal(data, &s) == nil {
-			claimed[s.Slot] = true
+		if json.Unmarshal(data, &s) != nil {
+			continue
 		}
+		// Self-healing: a claim whose worktree was deleted out from under
+		// it (recorded path no longer exists) no longer holds its slot.
+		// Stat only — no git, no deletion — so allocation stays fast and
+		// side-effect-free. Legacy claims with no recorded path are kept
+		// (conservative) until "liferay worktree prune" clears them.
+		if s.WorktreePath != "" && !fsutil.Exists(s.WorktreePath) {
+			continue
+		}
+		claimed[s.Slot] = true
 	}
 	return claimed
 }

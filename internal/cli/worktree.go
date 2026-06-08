@@ -9,9 +9,11 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/david-truong/liferay-portal-cli/internal/docker"
 	"github.com/david-truong/liferay-portal-cli/internal/fsutil"
 	"github.com/david-truong/liferay-portal-cli/internal/portal"
 	"github.com/david-truong/liferay-portal-cli/internal/state"
+	"github.com/david-truong/liferay-portal-cli/internal/tomcat"
 	"github.com/spf13/cobra"
 )
 
@@ -56,6 +58,34 @@ var worktreeRemoveCmd = &cobra.Command{
 	Short: "Remove a worktree and its CLI state directory",
 	Args:  cobra.ExactArgs(1),
 	RunE:  runWorktreeRemove,
+}
+
+var (
+	worktreePruneYes    bool
+	worktreePruneDryRun bool
+)
+
+var worktreePruneCmd = &cobra.Command{
+	Use:   "prune",
+	Short: "Remove CLI state for worktrees that were deleted outside the CLI",
+	Long: `Scans ~/.liferay-cli/worktrees/ for state directories whose git worktree
+no longer exists (e.g. the worktree was "rm -rf"-ed instead of removed with
+"liferay worktree remove"). Such orphaned state keeps claiming its slot and
+can leave Docker containers and a Tomcat process running.
+
+For each orphan, prune stops the slot's Docker stack and any stranded Tomcat
+process, then removes the state directory — freeing the slot.
+
+Detection is conservative: an orphan is only removed when its recorded
+worktree path is gone, or (for older state with no recorded path) when the
+directory's hash can be reproduced from a deleted path. State that cannot be
+verified — for instance a live worktree belonging to another repository — is
+left untouched.
+
+Prints what it would do and asks for confirmation. Pass --dry-run to only
+report, or --yes to skip the prompt.`,
+	Args: cobra.NoArgs,
+	RunE: runWorktreePrune,
 }
 
 var worktreeListJSON bool
@@ -148,7 +178,9 @@ func init() {
 	worktreeAddCmd.Flags().BoolVar(&worktreeSkipBuild, "skip-build", false, "Skip running 'liferay build' (ant all) after creating the worktree")
 	worktreeRemoveCmd.Flags().BoolVar(&worktreeRemoveYes, "yes", false, "Skip the confirmation prompt. Required when stdin is not a TTY (or set LIFERAY_CLI_ASSUME_YES=1).")
 	worktreeListCmd.Flags().BoolVar(&worktreeListJSON, "json", false, "Emit machine-readable JSON instead of git porcelain. Schema is stable: [{path, branch, slot, primary}].")
-	worktreeCmd.AddCommand(worktreeAddCmd, worktreeRemoveCmd, worktreeListCmd)
+	worktreePruneCmd.Flags().BoolVar(&worktreePruneYes, "yes", false, "Skip the confirmation prompt. Required when stdin is not a TTY (or set LIFERAY_CLI_ASSUME_YES=1).")
+	worktreePruneCmd.Flags().BoolVar(&worktreePruneDryRun, "dry-run", false, "Report orphaned state without stopping anything or deleting.")
+	worktreeCmd.AddCommand(worktreeAddCmd, worktreeRemoveCmd, worktreeListCmd, worktreePruneCmd)
 	rootCmd.AddCommand(worktreeCmd)
 }
 
@@ -347,6 +379,11 @@ func removeWorktree(absTarget string, assumeYes bool, in io.Reader, out io.Write
 	stateDir := state.Dir(absTarget)
 	bundleDir := filepath.Join(absTarget, bundleSubdirName)
 
+	// Stop the slot's Docker stack and Tomcat before deleting anything, so
+	// the removal doesn't leak running containers or a Tomcat process.
+	dockerState, hasSlot := docker.LoadState(absTarget)
+	stopSlotRuntime(stateDir, absTarget, dockerState.Slot, hasSlot)
+
 	if err := gitRun("worktree", "remove", absTarget); err != nil {
 		return err
 	}
@@ -362,6 +399,123 @@ func removeWorktree(absTarget string, assumeYes bool, in io.Reader, out io.Write
 		}
 	}
 	return nil
+}
+
+func runWorktreePrune(_ *cobra.Command, _ []string) error {
+	claims, err := docker.ScanClaims(liveWorktreeParents())
+	if err != nil {
+		return err
+	}
+
+	var orphaned, unknown []docker.Claim
+	for _, c := range claims {
+		switch c.Status {
+		case docker.ClaimOrphaned:
+			orphaned = append(orphaned, c)
+		case docker.ClaimUnknown:
+			unknown = append(unknown, c)
+		}
+	}
+
+	printPruneReport(orphaned, unknown, os.Stdout)
+
+	if len(orphaned) == 0 {
+		fmt.Println("Nothing to prune.")
+		return nil
+	}
+	if worktreePruneDryRun {
+		fmt.Println("\nDry run — nothing was stopped or removed.")
+		return nil
+	}
+
+	if !confirmWithIO(
+		fmt.Sprintf("This will stop any running Docker stack and Tomcat for the above %d orphan(s) and delete their CLI state directories.", len(orphaned)),
+		worktreePruneYes, os.Stdin, os.Stdout, isStdinTTY(),
+	) {
+		return ExitErr(ExitConfirmationDeclined,
+			"prune declined — pass --yes or set %s=1 to skip the prompt", AssumeYesEnvVar)
+	}
+
+	for _, c := range orphaned {
+		fmt.Printf("\nPruning %s (slot %s) ...\n", state.DisplayHome(c.Dir), slotLabel(c))
+		stopSlotRuntime(c.Dir, c.ResolvedPath, c.Slot, c.HasSlot)
+		if err := os.RemoveAll(c.Dir); err != nil {
+			fmt.Printf("  error removing state dir: %v\n", err)
+		} else {
+			fmt.Println("  removed state directory")
+		}
+	}
+	return nil
+}
+
+// stopSlotRuntime stops a slot's Docker stack and Tomcat process before its
+// state directory is removed. Shared by "prune" (worktree already gone) and
+// "remove" (worktree still present). Tomcat is stopped by PID rather than
+// catalina.sh so it works even when the bundle has been deleted; the PID
+// must reference bundleDir, guarding against killing an unrelated process.
+// hasSlot is false for state dirs that never ran a database.
+func stopSlotRuntime(stateDirRoot, worktreePath string, slot int, hasSlot bool) {
+	if worktreePath != "" {
+		bundleDir := filepath.Join(worktreePath, bundleSubdirName)
+		pidFile := filepath.Join(stateDirRoot, "tomcat.pid")
+		if stopped, err := tomcat.ForceStop(pidFile, bundleDir); err != nil {
+			fmt.Printf("  warning: %v\n", err)
+		} else if stopped {
+			fmt.Println("  stopped Tomcat process")
+		}
+	}
+	if hasSlot {
+		if err := docker.StopStack(filepath.Join(stateDirRoot, "docker"), slot); err != nil {
+			fmt.Printf("  warning: could not stop Docker stack: %v\n", err)
+		}
+	}
+}
+
+func printPruneReport(orphaned, unknown []docker.Claim, out io.Writer) {
+	if len(orphaned) > 0 {
+		fmt.Fprintln(out, "Orphaned state (worktree deleted):")
+		for _, c := range orphaned {
+			fmt.Fprintf(out, "  %-40s slot %-7s %s\n",
+				filepath.Base(c.Dir), slotLabel(c), state.DisplayHome(c.ResolvedPath))
+		}
+	}
+	if len(unknown) > 0 {
+		fmt.Fprintln(out, "\nUnverifiable — left untouched (may belong to another repo):")
+		for _, c := range unknown {
+			fmt.Fprintf(out, "  %-40s slot %s\n", filepath.Base(c.Dir), slotLabel(c))
+		}
+	}
+}
+
+// slotLabel renders the slot for display: the number, or "-" when the state
+// dir holds no ports.json.
+func slotLabel(c docker.Claim) string {
+	if !c.HasSlot {
+		return "-"
+	}
+	return fmt.Sprintf("%d", c.Slot)
+}
+
+// liveWorktreeParents returns the parent directories of the current repo's
+// live worktrees, used to reconstruct paths for legacy state dirs. Returns nil
+// when not inside a git repository — recorded-path orphans are still detected.
+func liveWorktreeParents() []string {
+	porcelain, err := gitOutput("worktree", "list", "--porcelain")
+	if err != nil {
+		return nil
+	}
+	primary, _ := gitPrimaryRoot("")
+	entries := parseWorktreePorcelain(porcelain, primary)
+	seen := make(map[string]bool)
+	var parents []string
+	for _, e := range entries {
+		parent := filepath.Dir(e.Path)
+		if !seen[parent] {
+			seen[parent] = true
+			parents = append(parents, parent)
+		}
+	}
+	return parents
 }
 
 // gitPrimaryRoot returns the primary worktree root (the directory whose
