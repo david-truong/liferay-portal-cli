@@ -518,6 +518,23 @@ func liveWorktreeParents() []string {
 	return parents
 }
 
+// isPrimaryWorktree reports whether worktreeRoot is its repository's primary
+// checkout (as opposed to a linked git worktree). Only the primary is allowed
+// to claim slot 0; see docker.allocateFreshSlot. Returns false when the
+// primary cannot be determined, so an indeterminate worktree never grabs the
+// reserved slot.
+func isPrimaryWorktree(worktreeRoot string) bool {
+	primary, err := gitPrimaryRoot(worktreeRoot)
+	if err != nil {
+		return false
+	}
+	abs, err := filepath.Abs(worktreeRoot)
+	if err != nil {
+		return false
+	}
+	return abs == primary
+}
+
 // gitPrimaryRoot returns the primary worktree root (the directory whose
 // .git is the common dir, not a "gitdir:" file). dir scopes the git
 // invocation; pass "" to inherit the current process working directory.

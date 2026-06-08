@@ -260,13 +260,13 @@ func StateDir(worktreeRoot string) string {
 // correct JDBC stanza for the stored engine. If requestedEngine != "" it
 // replaces whatever was in state (used by "liferay db up --engine X").
 // Returns the State that is now authoritative.
-func Setup(worktreeRoot, bundleDir, requestedEngine string) (State, Ports, error) {
+func Setup(worktreeRoot, bundleDir, requestedEngine string, isPrimary bool) (State, Ports, error) {
 	stateDir := StateDir(worktreeRoot)
 	if err := os.MkdirAll(stateDir, 0755); err != nil {
 		return State{}, Ports{}, err
 	}
 
-	s, err := loadOrInitState(stateDir, requestedEngine, worktreeRoot)
+	s, err := loadOrInitState(stateDir, requestedEngine, worktreeRoot, isPrimary)
 	if err != nil {
 		return State{}, Ports{}, err
 	}
@@ -421,7 +421,7 @@ func ProjectName(slot int) string {
 // every other worktree's persisted ports.json — that way the second
 // worktree picks slot 1 even if it boots before the first has run
 // `docker compose up` (i.e. before slot 0's host ports are actually bound).
-func loadOrInitState(stateDir, requestedEngine, worktreeRoot string) (State, error) {
+func loadOrInitState(stateDir, requestedEngine, worktreeRoot string, isPrimary bool) (State, error) {
 	if requestedEngine != "" && !IsSupportedEngine(requestedEngine) {
 		return State{}, fmt.Errorf("unsupported engine %q (want one of: %s)",
 			requestedEngine, strings.Join(SupportedEngines, ", "))
@@ -441,7 +441,7 @@ func loadOrInitState(stateDir, requestedEngine, worktreeRoot string) (State, err
 	}
 
 	if !isPersisted(portsFile) {
-		s.Slot = allocateFreshSlot(stateDir)
+		s.Slot = allocateFreshSlot(stateDir, isPrimary)
 	}
 	if s.Engine == "" {
 		s.Engine = DefaultEngine
@@ -469,12 +469,22 @@ func loadOrInitState(stateDir, requestedEngine, worktreeRoot string) (State, err
 // by another worktree's persisted ports.json and (b) has no host ports
 // currently bound by any local process. Caller must hold the slot lock.
 //
+// Slot 0 (stock, unoffset ports) is reserved for a repository's primary
+// checkout: when isPrimary is false the search starts at slot 1, so a linked
+// worktree never squats slot 0 and leaves it for the primary. Among primaries
+// of different repositories the first to allocate wins slot 0; later ones fall
+// through to the lowest free slot via the normal claimed/port checks.
+//
 // selfStateDir is excluded from the claimed-slot scan so a worktree
 // re-running loadOrInitState against its own state directory doesn't see
 // itself as a claimant.
-func allocateFreshSlot(selfStateDir string) int {
+func allocateFreshSlot(selfStateDir string, isPrimary bool) int {
+	minSlot := 0
+	if !isPrimary {
+		minSlot = 1
+	}
 	claimed := claimedSlots(selfStateDir)
-	for slot := 0; slot < 100; slot++ {
+	for slot := minSlot; slot < 100; slot++ {
 		if claimed[slot] {
 			continue
 		}
@@ -482,7 +492,7 @@ func allocateFreshSlot(selfStateDir string) int {
 			return slot
 		}
 	}
-	return 0
+	return minSlot
 }
 
 // claimedSlots returns the set of slots currently persisted by other

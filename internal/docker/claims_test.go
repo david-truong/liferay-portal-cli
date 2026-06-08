@@ -129,6 +129,27 @@ func TestScanClaimsLegacyUnknown(t *testing.T) {
 	}
 }
 
+// A linked (non-primary) worktree must never be handed slot 0 — it is
+// reserved for the repository's primary checkout. Asserting ">= 1" keeps the
+// test independent of which host ports happen to be bound.
+func TestAllocateFreshSlotReservesZeroForLinkedWorktree(t *testing.T) {
+	setHome(t)
+	if got := allocateFreshSlot(t.TempDir(), false); got < 1 {
+		t.Errorf("linked worktree got slot %d, want >= 1 (slot 0 is reserved)", got)
+	}
+}
+
+// A linked worktree skips both the reserved slot 0 and any slot another
+// worktree already claims.
+func TestAllocateFreshSlotLinkedSkipsClaimed(t *testing.T) {
+	setHome(t)
+	live := t.TempDir()
+	writeClaim(t, "other-aaaaaaaa", State{Slot: 1, WorktreePath: live})
+	if got := allocateFreshSlot(t.TempDir(), false); got < 2 {
+		t.Errorf("got slot %d, want >= 2 (0 reserved, 1 claimed)", got)
+	}
+}
+
 func TestClaimedSlotsSkipsDeletedWorktree(t *testing.T) {
 	setHome(t)
 	live := t.TempDir()

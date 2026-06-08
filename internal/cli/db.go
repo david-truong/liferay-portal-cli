@@ -161,7 +161,7 @@ func runDBUp(_ *cobra.Command, _ []string) error {
 		return fmt.Errorf("resolving bundle dir: %w", err)
 	}
 
-	dockerState, ports, err := docker.Setup(worktreeRoot, bundleDir, dbEngine)
+	dockerState, ports, err := docker.Setup(worktreeRoot, bundleDir, dbEngine, isPrimaryWorktree(worktreeRoot))
 	if err != nil {
 		return fmt.Errorf("setting up docker compose: %w", err)
 	}

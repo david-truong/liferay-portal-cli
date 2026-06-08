@@ -285,7 +285,7 @@ func ensureDB(bundleDir string) (docker.Ports, error) {
 	if err := checkStockPorts(worktreeRoot); err != nil {
 		return docker.Ports{}, err
 	}
-	state, ports, err := docker.Setup(worktreeRoot, bundleDir, "")
+	state, ports, err := docker.Setup(worktreeRoot, bundleDir, "", isPrimaryWorktree(worktreeRoot))
 	if err != nil {
 		return docker.Ports{}, fmt.Errorf("setting up docker compose: %w", err)
 	}

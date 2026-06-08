@@ -11,7 +11,7 @@ import (
 func TestLoadOrInitStateCreatesFile(t *testing.T) {
 	home := t.TempDir(); t.Setenv("HOME", home); t.Setenv("USERPROFILE", home)
 	dir := t.TempDir()
-	state, err := loadOrInitState(dir, "", dir)
+	state, err := loadOrInitState(dir, "", dir, true)
 	if err != nil {
 		t.Fatalf("loadOrInitState: %v", err)
 	}
@@ -41,7 +41,7 @@ func TestLoadOrInitStateReusesExisting(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	state, err := loadOrInitState(dir, "", dir)
+	state, err := loadOrInitState(dir, "", dir, true)
 	if err != nil {
 		t.Fatalf("loadOrInitState: %v", err)
 	}
@@ -62,7 +62,7 @@ func TestLoadOrInitStateOverridesEngine(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	state, err := loadOrInitState(dir, EnginePostgres, dir)
+	state, err := loadOrInitState(dir, EnginePostgres, dir, true)
 	if err != nil {
 		t.Fatalf("loadOrInitState: %v", err)
 	}
@@ -77,7 +77,7 @@ func TestLoadOrInitStateOverridesEngine(t *testing.T) {
 func TestLoadOrInitStateRejectsUnsupportedEngine(t *testing.T) {
 	home := t.TempDir(); t.Setenv("HOME", home); t.Setenv("USERPROFILE", home)
 	dir := t.TempDir()
-	_, err := loadOrInitState(dir, "oracle", dir)
+	_, err := loadOrInitState(dir, "oracle", dir, true)
 	if err == nil {
 		t.Error("expected error for unsupported engine")
 	}
