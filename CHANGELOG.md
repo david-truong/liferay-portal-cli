@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [v1.1.0] - 2026-06-09
+
+### Added — `client-extension` command
+
+- `liferay client-extension <name>` (alias `ce`) resolves a client extension by
+  name under `workspaces/<workspace>/client-extensions/`, runs `gw deploy`, and
+  copies the produced `<name>.zip` into the bundle's `osgi/client-extensions/`.
+  Names resolve the same way `liferay build` resolves modules, with a
+  `workspace/name` qualifier for duplicates.
+- For a containerized (microservice) extension — one with a `Dockerfile` — the
+  command then builds the image from `build/liferay-client-extension-build` and
+  starts the container detached, reading the published port from `LCP.json`
+  (`loadBalancer.targetPort`, default `58081`) and replacing any prior container
+  of the same name. Frontend extensions (no `Dockerfile`) stop after deploy.
+- Extension-specific `docker run` flags (network, environment variables, …) pass
+  through verbatim after a `--` separator.
+
 ### Changed — `server status` text output
 
 - `liferay server status` now prints a multiline summary showing pid, slot,

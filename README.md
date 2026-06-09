@@ -39,6 +39,7 @@ This drops a `liferay` binary into `$(go env GOPATH)/bin`. Make sure that direct
 | Command | Description |
 |---|---|
 | `liferay build [module ...]` | Full portal rebuild (`ant all`) or deploy specific modules (`gw deploy -a`) |
+| `liferay client-extension <name> [-- <docker run args>]` | Build a workspace client extension, deploy its zip to the bundle, and run its container |
 | `liferay clean [module ...]` | Full portal clean (`ant clean`) or clean specific modules (`gw clean`) |
 | `liferay sf [module ...]` | Format source portal-wide (`ant format-source-current-branch`) or per module |
 | `liferay gw <module> [gradle-args...]` | Run any Gradle task in a module by name |
@@ -83,6 +84,49 @@ The root-level Ant projects (`portal-impl`, `portal-kernel`, `util-bridges`, `ut
 
 ```sh
 liferay build portal-impl
+```
+
+### `liferay client-extension`
+
+Build, deploy, and run a workspace client extension. Names resolve against every
+`workspaces/<workspace>/client-extensions/<name>` directory that contains a
+`client-extension.yaml`, the same way `liferay build` resolves modules:
+
+```sh
+liferay client-extension liferay-sample-custom-element-1
+liferay ce liferay-sample-etc-spring-boot
+```
+
+When the same name exists in more than one workspace, qualify it with
+`workspace/name`:
+
+```sh
+liferay ce liferay-sample-workspace/liferay-sample-custom-element-1
+```
+
+The command runs `gw deploy` in the extension directory and copies the produced
+`<name>.zip` into the bundle's `osgi/client-extensions/`. For a containerized
+(microservice) extension — one with a `Dockerfile` — it then builds the image
+from `build/liferay-client-extension-build` and starts the container detached:
+
+```sh
+docker build -t <name>:latest .
+docker run -d --rm --name <name> -p <port>:<port> \
+  --add-host host.docker.internal:host-gateway <name>:latest
+```
+
+The port comes from `LCP.json` (`loadBalancer.targetPort`, default `58081`). Any
+running container of the same name is replaced, so the command is safe to re-run
+after an edit. Frontend extensions (no `Dockerfile`) stop after the zip is deployed.
+
+Extension-specific `docker run` flags pass through verbatim after a `--`
+separator (network, environment variables, etc.):
+
+```sh
+liferay ce liferay-seostudio-crawler -- \
+  --network crawler_elastic \
+  -e LIFERAY_SEO_STUDIO_CRAWLER_ELASTICSEARCH_HOST=elasticsearch \
+  -e COM_LIFERAY_LXC_DXP_MAINDOMAIN=host.docker.internal:8080
 ```
 
 ### `liferay clean`

@@ -35,13 +35,21 @@ var skipSegments = map[string]bool{
 type ModuleIndex struct {
 	byName   map[string][]string // basename → paths
 	bySuffix map[string][]string // "group/name" → paths
+
+	// noun and qualifier customize error messages so the same index type can
+	// serve both modules ("module" / "group/name") and client extensions
+	// ("client extension" / "workspace/name").
+	noun      string
+	qualifier string
 }
 
 // BuildModuleIndex walks all module roots under portalRoot and returns an index.
 func BuildModuleIndex(portalRoot string) (*ModuleIndex, error) {
 	idx := &ModuleIndex{
-		byName:   make(map[string][]string),
-		bySuffix: make(map[string][]string),
+		byName:    make(map[string][]string),
+		bySuffix:  make(map[string][]string),
+		noun:      "module",
+		qualifier: "group/name",
 	}
 	for _, rel := range moduleRoots {
 		root := filepath.Join(portalRoot, filepath.FromSlash(rel))
@@ -110,21 +118,21 @@ func (idx *ModuleIndex) AllPaths() []string {
 // Resolve returns the absolute path for the named module.
 func (idx *ModuleIndex) Resolve(name string) (string, error) {
 	if strings.Contains(name, "/") {
-		return resolveFromMap(name, idx.bySuffix, name)
+		return idx.resolveFromMap(name, idx.bySuffix, name)
 	}
-	return resolveFromMap(name, idx.byName, idx.suggest(name, 3))
+	return idx.resolveFromMap(name, idx.byName, idx.suggest(name, 3))
 }
 
-func resolveFromMap(name string, m map[string][]string, suggestionMsg string) (string, error) {
+func (idx *ModuleIndex) resolveFromMap(name string, m map[string][]string, suggestionMsg string) (string, error) {
 	paths := m[name]
 	switch len(paths) {
 	case 0:
-		return "", fmt.Errorf("no module named %q\n\nDid you mean:\n%s", name, suggestionMsg)
+		return "", fmt.Errorf("no %s named %q\n\nDid you mean:\n%s", idx.noun, name, suggestionMsg)
 	case 1:
 		return paths[0], nil
 	default:
-		return "", fmt.Errorf("ambiguous module %q — use a group/name qualifier:\n%s",
-			name, formatPaths(paths))
+		return "", fmt.Errorf("ambiguous %s %q — use a %s qualifier:\n%s",
+			idx.noun, name, idx.qualifier, formatPaths(paths))
 	}
 }
 

@@ -601,6 +601,13 @@ func writePortalExt(bundleDir, engine string, ports Ports) error {
 	return os.WriteFile(path, []byte(sb.String()), 0644)
 }
 
+// CheckAvailable reports whether the docker CLI is on PATH and its daemon is
+// reachable, with an actionable error otherwise. Exported for callers outside
+// the compose flow (e.g. building and running client-extension containers).
+func CheckAvailable() error {
+	return checkDocker()
+}
+
 func checkDocker() error {
 	if _, err := exec.LookPath("docker"); err != nil {
 		return fmt.Errorf(
