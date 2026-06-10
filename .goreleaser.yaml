@@ -29,6 +29,10 @@ brews:
       owner: david-truong
       name: homebrew-liferay
       token: "{{ .Env.HOMEBREW_TAP_GITHUB_TOKEN }}"
+    # Write into the tap's Formula/ subdirectory. Homebrew ignores root-level
+    # formulae once a Formula/ directory exists, so the generated formula must
+    # live there to be the one "brew install" resolves.
+    directory: Formula
     name: liferay
     homepage: https://github.com/david-truong/liferay-portal-cli
     description: CLI for Liferay portal development workflows (build modules, manage worktrees, run containers)
