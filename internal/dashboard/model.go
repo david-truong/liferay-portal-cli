@@ -25,9 +25,9 @@ type (
 	statusesMsg []Status
 
 	jiraMsg struct {
-		key   string
-		issue Issue
-		err   error
+		key  string
+		view string
+		err  error
 	}
 
 	actionDoneMsg struct {
@@ -44,7 +44,7 @@ type (
 )
 
 type jiraResult struct {
-	issue   Issue
+	view    string
 	err     error
 	loading bool
 }
@@ -111,8 +111,8 @@ func probeCmd(worktrees []Worktree) tea.Cmd {
 
 func jiraCmd(key string) tea.Cmd {
 	return func() tea.Msg {
-		issue, err := FetchIssue(key)
-		return jiraMsg{key: key, issue: issue, err: err}
+		view, err := FetchIssueView(key)
+		return jiraMsg{key: key, view: view, err: err}
 	}
 }
 
@@ -178,7 +178,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case jiraMsg:
-		m.jira[msg.key] = jiraResult{issue: msg.issue, err: msg.err}
+		m.jira[msg.key] = jiraResult{view: msg.view, err: msg.err}
 		return m, nil
 
 	case actionDoneMsg:
@@ -419,7 +419,7 @@ func (m model) viewPanel() string {
 
 	line("DB", m.viewDB(w, st, ports))
 	line("URL", m.portalURL(w))
-	line("Jira", m.viewJira(w))
+	b.WriteString(m.viewJira(w))
 
 	if verb := m.action[m.active]; verb != "" {
 		b.WriteString("\n" + dimStyle.Render(fmt.Sprintf("server %s in progress...", verb)) + "\n")
@@ -452,26 +452,32 @@ func (m model) viewDB(w Worktree, st Status, ports docker.Ports) string {
 		dimStyle.Render(fmt.Sprintf("   db %d · adminer %d", ports.MySQL, ports.Adminer))
 }
 
+// viewJira renders the `issues view` header block under the Jira label,
+// with continuation lines indented to the label column.
 func (m model) viewJira(w Worktree) string {
+	label := labelStyle.Render("Jira")
+
 	if w.Ticket == "" {
-		return dimStyle.Render("no ticket on branch")
+		return label + dimStyle.Render("no ticket on branch") + "\n"
 	}
 
 	result, ok := m.jira[w.Ticket]
 	switch {
 	case !ok || result.loading:
-		return w.Ticket + dimStyle.Render(" — loading...")
+		return label + w.Ticket + dimStyle.Render(" — loading...") + "\n"
 	case result.err != nil:
-		return w.Ticket + " " + noteStyle.Render(result.err.Error())
+		return label + w.Ticket + " " + noteStyle.Render(result.err.Error()) + "\n"
 	}
 
-	issue := result.issue
-	value := fmt.Sprintf("%s — %s", issue.Key, issue.Status)
-	if issue.Summary != "" {
-		value += fmt.Sprintf(" — %q", issue.Summary)
+	pad := strings.Repeat(" ", 8)
+
+	var b strings.Builder
+	for i, l := range strings.Split(result.view, "\n") {
+		if i == 0 {
+			b.WriteString(label + l + "\n")
+			continue
+		}
+		b.WriteString(pad + l + "\n")
 	}
-	if issue.Assignee != "" {
-		value += dimStyle.Render(" (" + issue.Assignee + ")")
-	}
-	return value
+	return b.String()
 }

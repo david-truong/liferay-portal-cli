@@ -20,3 +20,16 @@ func TestTicketKey(t *testing.T) {
 		}
 	}
 }
+
+func TestHeaderBlock(t *testing.T) {
+	view := "LPD-1  Summary\n────\n  Status:   Open\n  URL:      https://x\n\nLong description\nmore\n"
+
+	want := "LPD-1  Summary\n────\n  Status:   Open\n  URL:      https://x"
+	if got := headerBlock(view); got != want {
+		t.Errorf("headerBlock = %q, want %q", got, want)
+	}
+
+	if got := headerBlock("LPD-1  Summary\n  Status: Open\n"); got != "LPD-1  Summary\n  Status: Open" {
+		t.Errorf("headerBlock without description = %q", got)
+	}
+}
