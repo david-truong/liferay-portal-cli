@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"os"
 	"sync"
 	"time"
 
@@ -27,8 +28,9 @@ type Status struct {
 	Tomcat TomcatState
 	PID    int
 	DBUp   bool
-	CatOut string // catalina.out path, "" when the bundle is unresolvable
-	Err    error  // bundle resolution failure (e.g. never built)
+	CatOut string          // catalina.out path, "" when the bundle is unresolvable
+	Flags  map[string]bool // branch flag -> enabled in portal-ext.properties
+	Err    error           // bundle resolution failure (e.g. never built)
 }
 
 // probe inspects one worktree. Everything is path-parameterized, so no chdir
@@ -61,6 +63,13 @@ func probe(w Worktree) Status {
 
 	if docker.IsDockerManagedEngine(w.Engine) {
 		st.DBUp = portOpen(ports.MySQL)
+	}
+
+	if len(w.Flags) > 0 {
+		if path, err := portalExtPath(w.Path); err == nil {
+			data, _ := os.ReadFile(path)
+			st.Flags = flagStates(string(data), w.Flags)
+		}
 	}
 
 	return st

@@ -293,6 +293,9 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		verb := map[string]string{"s": "start", "x": "stop", "r": "restart"}[msg.String()]
 		m.action[m.active] = verb
 		m.note[m.active] = ""
+		if verb != "stop" {
+			m = m.applyBranchFlags(w)
+		}
 		return m, actionCmd(m.cfg.SelfExe, m.active, w, verb)
 
 	case "w":
@@ -301,6 +304,7 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		if m.action[m.active] != "" {
 			return m, nil
 		}
+		m = m.applyBranchFlags(w)
 		return m.startSequence(
 			"server wipe && db restart && server start",
 			[][]string{
@@ -445,6 +449,17 @@ func seqCmd(index int, selfExe, path string, argSets [][]string, logFile *os.Fil
 		}
 		return cmdDoneMsg{index: index}
 	}
+}
+
+// applyBranchFlags enables the branch's feature flags in the bundle's
+// portal-ext.properties ahead of a boot. Success is silent — the panel's
+// Flags line reflects the new state on the next probe; failures land in
+// the note.
+func (m model) applyBranchFlags(w Worktree) model {
+	if _, err := enableBranchFlags(w); err != nil {
+		m.note[m.active] = "feature flags: " + err.Error()
+	}
+	return m
 }
 
 // tailNow returns the refresh command for the drawer's current source, or
@@ -624,6 +639,9 @@ func (m model) viewPanel() string {
 
 	line("DB", m.viewDB(w, st, ports))
 	line("URL", m.portalURL(w))
+	if len(w.Flags) > 0 {
+		line("Flags", viewFlags(w, st))
+	}
 	b.WriteString(m.viewJira(w))
 
 	if verb := m.action[m.active]; verb != "" {
@@ -640,6 +658,20 @@ func (m model) viewPanel() string {
 	}
 
 	return b.String()
+}
+
+// viewFlags lists the branch's feature flags with their current state in
+// portal-ext.properties; they are enabled automatically before every boot.
+func viewFlags(w Worktree, st Status) string {
+	parts := make([]string, 0, len(w.Flags))
+	for _, flag := range w.Flags {
+		mark := stoppedDot
+		if st.Flags[flag] {
+			mark = readyDot
+		}
+		parts = append(parts, mark+" "+flag)
+	}
+	return strings.Join(parts, " · ") + dimStyle.Render("   (enabled on start)")
 }
 
 func (m model) viewDB(w Worktree, st Status, ports docker.Ports) string {

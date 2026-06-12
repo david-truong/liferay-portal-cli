@@ -18,6 +18,9 @@ type Worktree struct {
 	Engine  string // "" until `liferay db start` has run there
 	Primary bool
 	Ticket  string // Jira key parsed from the branch name, "" when none
+	// Flags are the feature flags this branch declares on top of master;
+	// the dashboard enables them in portal-ext.properties before boots.
+	Flags []string
 	// Hostname is the slot-pool name from /etc/hosts (e.g. slot3.liferay.test),
 	// "" when the pool is not installed — the UI then falls back to localhost.
 	Hostname string

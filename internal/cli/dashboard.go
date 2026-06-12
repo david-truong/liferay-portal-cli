@@ -70,6 +70,7 @@ func runDashboard(_ *cobra.Command, _ []string) error {
 			Slot:    e.Slot,
 			Primary: e.Primary,
 			Ticket:  dashboard.TicketKey(e.Branch),
+			Flags:   dashboard.BranchFlags(e.Path),
 		}
 		if st, ok := docker.LoadState(e.Path); ok {
 			w.Engine = st.Engine
