@@ -56,11 +56,10 @@ type jiraResult struct {
 	loading bool
 }
 
-// runState tracks one ad-hoc `liferay <args>` command launched from the
-// dashboard for one worktree. logPath outlives the run so the output stays
-// inspectable after completion.
+// runState tracks one ad-hoc liferay command (or sequence) launched from
+// the dashboard for one worktree. logPath outlives the run so the output
+// stays inspectable after completion.
 type runState struct {
-	cmd     *exec.Cmd
 	line    string
 	logPath string
 	running bool
@@ -296,6 +295,20 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.note[m.active] = ""
 		return m, actionCmd(m.cfg.SelfExe, m.active, w, verb)
 
+	case "w":
+		// Full reset: wipe bundle state, bounce the DB stack (container
+		// data is not persisted, so this yields a fresh database), boot.
+		if m.action[m.active] != "" {
+			return m, nil
+		}
+		return m.startSequence(
+			"server wipe && db restart && server start",
+			[][]string{
+				{"server", "wipe", "--yes"},
+				{"db", "restart"},
+				{"server", "start"},
+			})
+
 	case ":":
 		m.inputMode = true
 		m.cmdInput.SetValue("")
@@ -378,8 +391,15 @@ func (m model) handleInputKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 }
 
 // startCommand launches `liferay -C <worktree> <line>` with output streamed
-// to a temp log file the drawer tails. One command per worktree at a time.
+// to a temp log file the drawer tails.
 func (m model) startCommand(line string) (tea.Model, tea.Cmd) {
+	return m.startSequence(line, [][]string{strings.Fields(line)})
+}
+
+// startSequence launches one or more liferay invocations back-to-back
+// against the active worktree, all writing to one log file the drawer
+// tails. One run per worktree at a time.
+func (m model) startSequence(line string, argSets [][]string) (tea.Model, tea.Cmd) {
 	index := m.active
 	if m.runs[index].running {
 		m.note[index] = "a command is already running for this worktree"
@@ -392,34 +412,38 @@ func (m model) startCommand(line string) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 
-	args := append([]string{"-C", m.cfg.Worktrees[index].Path}, strings.Fields(line)...)
-
-	cmd := exec.Command(m.cfg.SelfExe, args...)
-	cmd.Stdout = logFile
-	cmd.Stderr = logFile
-	if err := cmd.Start(); err != nil {
-		logFile.Close()
-		m.note[index] = err.Error()
-		return m, nil
-	}
-
-	m.runs[index] = runState{cmd: cmd, line: line, logPath: logFile.Name(), running: true}
+	m.runs[index] = runState{line: line, logPath: logFile.Name(), running: true}
 	m.note[index] = ""
 	m.showLogs = true
 	m.logSrc[index] = srcCommand
 	m.logView.Height = m.logHeight()
 	m.logView.SetContent("")
 
-	return m, tea.Batch(waitCmd(index, cmd, logFile), logCmd(index, logFile.Name()))
+	seq := seqCmd(index, m.cfg.SelfExe, m.cfg.Worktrees[index].Path, argSets, logFile)
+
+	return m, tea.Batch(seq, logCmd(index, logFile.Name()))
 }
 
-// waitCmd reaps the command once it exits. The log file is closed here, not
-// in startCommand, because the child writes to it until then.
-func waitCmd(index int, cmd *exec.Cmd, logFile *os.File) tea.Cmd {
+// seqCmd runs each invocation in order, stopping at the first failure. The
+// log file is closed here because the children write to it until then.
+func seqCmd(index int, selfExe, path string, argSets [][]string, logFile *os.File) tea.Cmd {
 	return func() tea.Msg {
-		err := cmd.Wait()
-		logFile.Close()
-		return cmdDoneMsg{index: index, err: err}
+		defer logFile.Close()
+
+		for _, args := range argSets {
+			fmt.Fprintf(logFile, "$ liferay %s\n", strings.Join(args, " "))
+
+			cmd := exec.Command(selfExe, append([]string{"-C", path}, args...)...)
+			cmd.Stdout = logFile
+			cmd.Stderr = logFile
+			if err := cmd.Run(); err != nil {
+				return cmdDoneMsg{
+					index: index,
+					err:   fmt.Errorf("liferay %s: %v", strings.Join(args, " "), err),
+				}
+			}
+		}
+		return cmdDoneMsg{index: index}
 	}
 }
 
@@ -524,7 +548,7 @@ func (m model) View() string {
 		b.WriteString("\n" + m.cmdInput.View())
 	} else {
 		b.WriteString("\n" + dimStyle.Render(
-			"←/→ tabs · o open · s start · x stop · r restart · : run · l logs · u refresh · q quit"))
+			"←/→ tabs · o open · s start · x stop · r restart · w reset · : run · l logs · u refresh · q quit"))
 	}
 
 	return b.String()

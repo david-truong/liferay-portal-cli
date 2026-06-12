@@ -82,7 +82,7 @@ func TestCommandPrompt(t *testing.T) {
 	}
 
 	m.cmdInput.SetValue("build foo-web")
-	next, _ = m.handleKey(tea.KeyMsg{Type: tea.KeyEnter})
+	next, cmd = m.handleKey(tea.KeyMsg{Type: tea.KeyEnter})
 	m = next.(model)
 
 	if m.inputMode {
@@ -96,15 +96,67 @@ func TestCommandPrompt(t *testing.T) {
 		t.Fatal("drawer did not open on command output")
 	}
 
-	if err := run.cmd.Wait(); err != nil {
-		t.Fatalf("stub command failed: %v", err)
+	done := runBatch(t, cmd)
+	if done.err != nil {
+		t.Fatalf("stub command failed: %v", done.err)
 	}
 	data, err := os.ReadFile(run.logPath)
 	if err != nil {
 		t.Fatalf("reading command log: %v", err)
 	}
-	if got := strings.TrimSpace(string(data)); got != "-C /w/LPD-1 build foo-web" {
-		t.Errorf("command args = %q", got)
+	if got := strings.TrimSpace(string(data)); !strings.HasSuffix(got, "-C /w/LPD-1 build foo-web") {
+		t.Errorf("command log = %q", got)
+	}
+	os.Remove(run.logPath)
+}
+
+// runBatch executes every command in a tea.Batch result and returns the
+// cmdDoneMsg it produces.
+func runBatch(t *testing.T, cmd tea.Cmd) cmdDoneMsg {
+	t.Helper()
+	batch, ok := cmd().(tea.BatchMsg)
+	if !ok {
+		t.Fatal("expected a tea.BatchMsg")
+	}
+	for _, c := range batch {
+		if done, ok := c().(cmdDoneMsg); ok {
+			return done
+		}
+	}
+	t.Fatal("no cmdDoneMsg in batch")
+	return cmdDoneMsg{}
+}
+
+func TestResetSequence(t *testing.T) {
+	m := testModel()
+	m.cfg.SelfExe = "/bin/echo"
+	m.active = 1
+
+	next, cmd := m.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'w'}})
+	m = next.(model)
+
+	run := m.runs[1]
+	if !run.running || run.logPath == "" {
+		t.Fatalf("reset not started: %+v", run)
+	}
+
+	done := runBatch(t, cmd)
+	if done.err != nil {
+		t.Fatalf("reset sequence failed: %v", done.err)
+	}
+	data, err := os.ReadFile(run.logPath)
+	if err != nil {
+		t.Fatalf("reading reset log: %v", err)
+	}
+	log := string(data)
+	for _, want := range []string{
+		"$ liferay server wipe --yes",
+		"$ liferay db restart",
+		"$ liferay server start",
+	} {
+		if !strings.Contains(log, want) {
+			t.Errorf("reset log missing %q:\n%s", want, log)
+		}
 	}
 	os.Remove(run.logPath)
 }
