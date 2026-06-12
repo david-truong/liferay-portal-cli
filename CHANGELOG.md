@@ -7,6 +7,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [v1.2.0] - 2026-06-12
+
+### Added — `dashboard` command
+
+- `liferay dashboard` opens a full-screen terminal UI with one tab per git
+  worktree, starting on the worktree it was launched from. Each tab shows the
+  slot, Tomcat state (ready / starting / stopped / stale pid), database engine
+  and container state, the slot's offset ports, the branch's Jira ticket
+  (rendered through the `issues` CLI), and the feature flags the branch adds.
+- Single-key actions per worktree: `o` opens the portal in the browser using
+  the slot hostname when installed, `s`/`x`/`r` start, stop, and restart the
+  server (`x` also stops the DB stack), and `w` performs a full reset
+  (`server wipe` + `db restart` + `server start`).
+- `:` opens a command prompt that runs any liferay subcommand against the
+  selected worktree (`build`, `test-integration`, ...) with live output in
+  the log drawer. The server log (`catalina.out`) shows by default, sized to
+  fit the terminal; `l` cycles the drawer between command output, the server
+  log, and closed.
+- Feature flags the branch declares on top of master (added `feature.flag.*`
+  lines in portal.properties) are enabled automatically in the bundle's
+  `portal-ext.properties` before every dashboard-initiated boot, and shown
+  with their current state in the panel.
+- `liferay dashboard install-hosts` precreates stable per-slot hostnames
+  (`slot0.liferay.test` ... `slot9.liferay.test`) in `/etc/hosts` as a
+  one-time sudo step, so whatever worktree claims a slot is always reachable
+  at the same name.
+
 ## [v1.1.0] - 2026-06-09
 
 ### Added — `client-extension` command
