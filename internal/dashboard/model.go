@@ -157,12 +157,24 @@ func jiraCmd(key string) tea.Cmd {
 }
 
 func actionCmd(selfExe string, index int, w Worktree, verb string) tea.Cmd {
+	commands := [][]string{{"server", verb}}
+	if verb == "stop" {
+		commands = append(commands, []string{"db", "stop"})
+	}
+
 	return func() tea.Msg {
-		out, err := exec.Command(selfExe, "-C", w.Path, "server", verb).CombinedOutput()
-		if err != nil {
-			err = fmt.Errorf("server %s: %v\n%s", verb, err, lastLines(string(out), 3))
+		for _, args := range commands {
+			out, err := exec.Command(selfExe, append([]string{"-C", w.Path}, args...)...).CombinedOutput()
+			if err != nil {
+				return actionDoneMsg{
+					index: index,
+					verb:  verb,
+					err: fmt.Errorf("%s: %v\n%s",
+						strings.Join(args, " "), err, lastLines(string(out), 3)),
+				}
+			}
 		}
-		return actionDoneMsg{index: index, verb: verb, err: err}
+		return actionDoneMsg{index: index, verb: verb}
 	}
 }
 
@@ -223,6 +235,8 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.action[msg.index] = ""
 		if msg.err != nil {
 			m.note[msg.index] = msg.err.Error()
+		} else if msg.verb == "stop" {
+			m.note[msg.index] = "server and db stopped"
 		} else {
 			m.note[msg.index] = fmt.Sprintf("server %s done", msg.verb)
 		}
