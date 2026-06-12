@@ -5,7 +5,9 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 )
 
 func testModel() model {
@@ -184,6 +186,21 @@ func TestEscCancelsPromptOnly(t *testing.T) {
 	}
 	if _, quit := cmd().(tea.QuitMsg); !quit {
 		t.Fatal("esc outside the prompt did not quit")
+	}
+}
+
+func TestViewFitsTerminalHeight(t *testing.T) {
+	m := testModel()
+	m.logView = viewport.New(m.width-2, 5)
+	m.logView.SetContent(strings.Repeat("log line\n", 500))
+	m.jira["LPD-1"] = jiraResult{view: "LPD-1  Fix\n  Status: Open\n  URL: https://x"}
+	m.note[0] = "server start done"
+
+	for _, height := range []int{20, 30, 50} {
+		m.height = height
+		if got := lipgloss.Height(m.View()); got > height {
+			t.Errorf("view is %d lines for a %d-line terminal", got, height)
+		}
 	}
 }
 

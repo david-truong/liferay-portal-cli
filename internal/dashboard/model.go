@@ -115,6 +115,7 @@ func newModel(cfg Config) model {
 		note:     make([]string, len(cfg.Worktrees)),
 		runs:     make([]runState, len(cfg.Worktrees)),
 		logSrc:   make([]int, len(cfg.Worktrees)),
+		showLogs: true,
 		cmdInput: cmdInput,
 	}
 }
@@ -209,7 +210,8 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
 		m.height = msg.Height
-		m.logView = viewport.New(msg.Width-2, m.logHeight())
+		m.logView = viewport.New(msg.Width-2, 5)
+		m.logView.Height = m.availLogHeight()
 		m.ready = true
 		return m, nil
 
@@ -225,10 +227,17 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case statusesMsg:
 		m.statuses = msg
+		m.logView.Height = m.availLogHeight()
+		// The probe delivers the catalina.out path the default drawer
+		// needs, so refresh the tail now rather than on the next tick.
+		if tail := m.tailNow(); tail != nil {
+			return m, tail
+		}
 		return m, nil
 
 	case jiraMsg:
 		m.jira[msg.key] = jiraResult{view: msg.view, err: msg.err}
+		m.logView.Height = m.availLogHeight()
 		return m, nil
 
 	case actionDoneMsg:
@@ -350,7 +359,7 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.showLogs = false
 		}
 		if m.showLogs {
-			m.logView.Height = m.logHeight()
+			m.logView.Height = m.availLogHeight()
 			m.logView.SetContent("")
 			if tail := m.tailNow(); tail != nil {
 				return m, tail
@@ -376,6 +385,7 @@ func (m model) afterTabSwitch() (tea.Model, tea.Cmd) {
 	if !m.showLogs {
 		return m, nil
 	}
+	m.logView.Height = m.availLogHeight()
 	m.logView.SetContent("")
 	if tail := m.tailNow(); tail != nil {
 		return m, tail
@@ -434,7 +444,7 @@ func (m model) startSequence(line string, argSets [][]string) (tea.Model, tea.Cm
 	m.note[index] = ""
 	m.showLogs = true
 	m.logSrc[index] = srcCommand
-	m.logView.Height = m.logHeight()
+	m.logView.Height = m.availLogHeight()
 	m.logView.SetContent("")
 
 	seq := seqCmd(index, m.cfg.SelfExe, m.cfg.Worktrees[index].Path, argSets, logFile)
@@ -503,11 +513,18 @@ func (m model) portalURL(w Worktree) string {
 	return fmt.Sprintf("http://%s:%d/", host, ports.TomcatHTTP)
 }
 
-// logHeight reserves the top of the screen for tabs + panel + footer.
-func (m model) logHeight() int {
-	h := m.height - 14
-	if h < 5 {
-		h = 5
+// availLogHeight measures the rendered chrome (tabs, panel, drawer title,
+// footer) and returns the rows left for the log body, so the full view
+// always fits the terminal without scrolling. The panel height varies with
+// the Jira block, flags, and notes, so this is recomputed as they change.
+func (m model) availLogHeight() int {
+	chrome := lipgloss.Height(m.viewTabs()+"\n\n"+m.viewPanel()) +
+		1 + // drawer title line
+		2 // footer/input line and its separating newline
+
+	h := m.height - chrome
+	if h < 3 {
+		h = 3
 	}
 	return h
 }
@@ -569,8 +586,10 @@ func (m model) View() string {
 	b.WriteString(m.viewPanel())
 
 	if m.showLogs {
+		logView := m.logView
+		logView.Height = m.availLogHeight()
 		b.WriteString("\n" + dimStyle.Render("── "+m.drawerTitle()+" ") + "\n")
-		b.WriteString(m.logView.View())
+		b.WriteString(logView.View())
 	}
 
 	if m.inputMode {
