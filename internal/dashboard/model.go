@@ -215,7 +215,7 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	w := m.cfg.Worktrees[m.active]
 
 	switch msg.String() {
-	case "q", "ctrl+c":
+	case "q", "esc", "ctrl+c":
 		return m, tea.Quit
 
 	case "right", "tab":
