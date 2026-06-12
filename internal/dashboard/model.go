@@ -2,12 +2,14 @@ package dashboard
 
 import (
 	"fmt"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
 	"time"
 
+	"github.com/charmbracelet/bubbles/textinput"
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -41,6 +43,11 @@ type (
 		content string
 		err     error
 	}
+
+	cmdDoneMsg struct {
+		index int
+		err   error
+	}
 )
 
 type jiraResult struct {
@@ -48,6 +55,22 @@ type jiraResult struct {
 	err     error
 	loading bool
 }
+
+// runState tracks one ad-hoc `liferay <args>` command launched from the
+// dashboard for one worktree. logPath outlives the run so the output stays
+// inspectable after completion.
+type runState struct {
+	cmd     *exec.Cmd
+	line    string
+	logPath string
+	running bool
+}
+
+// log drawer content sources.
+const (
+	srcServer = iota
+	srcCommand
+)
 
 type model struct {
 	cfg Config
@@ -60,9 +83,14 @@ type model struct {
 	// last action outcome shown in the panel.
 	action []string
 	note   []string
+	runs   []runState
 
 	showLogs bool
+	logSrc   []int
 	logView  viewport.Model
+
+	inputMode bool
+	cmdInput  textinput.Model
 
 	width  int
 	height int
@@ -70,12 +98,19 @@ type model struct {
 }
 
 func newModel(cfg Config) model {
+	cmdInput := textinput.New()
+	cmdInput.Prompt = "liferay> "
+	cmdInput.Placeholder = "build <module> · test-integration <module> --tests <filter> · ..."
+
 	return model{
 		cfg:      cfg,
 		statuses: make([]Status, len(cfg.Worktrees)),
 		jira:     map[string]jiraResult{},
 		action:   make([]string, len(cfg.Worktrees)),
 		note:     make([]string, len(cfg.Worktrees)),
+		runs:     make([]runState, len(cfg.Worktrees)),
+		logSrc:   make([]int, len(cfg.Worktrees)),
+		cmdInput: cmdInput,
 	}
 }
 
@@ -166,10 +201,8 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case tickMsg:
 		cmds := []tea.Cmd{probeCmd(m.cfg.Worktrees), tickCmd()}
-		if m.showLogs {
-			if catOut := m.statuses[m.active].CatOut; catOut != "" {
-				cmds = append(cmds, logCmd(m.active, catOut))
-			}
+		if tail := m.tailNow(); tail != nil {
+			cmds = append(cmds, tail)
 		}
 		return m, tea.Batch(cmds...)
 
@@ -189,6 +222,21 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.note[msg.index] = fmt.Sprintf("server %s done", msg.verb)
 		}
 		return m, probeCmd(m.cfg.Worktrees)
+
+	case cmdDoneMsg:
+		run := m.runs[msg.index]
+		run.running = false
+		m.runs[msg.index] = run
+		if msg.err != nil {
+			m.note[msg.index] = fmt.Sprintf("liferay %s failed: %v", run.line, msg.err)
+		} else {
+			m.note[msg.index] = fmt.Sprintf("liferay %s done", run.line)
+		}
+		cmds := []tea.Cmd{probeCmd(m.cfg.Worktrees)}
+		if tail := m.tailNow(); tail != nil {
+			cmds = append(cmds, tail)
+		}
+		return m, tea.Batch(cmds...)
 
 	case logMsg:
 		if msg.index != m.active || !m.showLogs {
@@ -212,6 +260,10 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	if m.inputMode {
+		return m.handleInputKey(msg)
+	}
+
 	w := m.cfg.Worktrees[m.active]
 
 	switch msg.String() {
@@ -238,12 +290,33 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.note[m.active] = ""
 		return m, actionCmd(m.cfg.SelfExe, m.active, w, verb)
 
+	case ":":
+		m.inputMode = true
+		m.cmdInput.SetValue("")
+		m.cmdInput.Focus()
+		return m, textinput.Blink
+
 	case "l":
-		m.showLogs = !m.showLogs
+		// Cycle the drawer: closed -> command output (when one exists) ->
+		// server log -> closed.
+		switch {
+		case !m.showLogs:
+			m.showLogs = true
+			if m.runs[m.active].logPath != "" {
+				m.logSrc[m.active] = srcCommand
+			} else {
+				m.logSrc[m.active] = srcServer
+			}
+		case m.logSrc[m.active] == srcCommand:
+			m.logSrc[m.active] = srcServer
+		default:
+			m.showLogs = false
+		}
 		if m.showLogs {
 			m.logView.Height = m.logHeight()
-			if catOut := m.statuses[m.active].CatOut; catOut != "" {
-				return m, logCmd(m.active, catOut)
+			m.logView.SetContent("")
+			if tail := m.tailNow(); tail != nil {
+				return m, tail
 			}
 		}
 		return m, nil
@@ -267,10 +340,96 @@ func (m model) afterTabSwitch() (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	m.logView.SetContent("")
-	if catOut := m.statuses[m.active].CatOut; catOut != "" {
-		return m, logCmd(m.active, catOut)
+	if tail := m.tailNow(); tail != nil {
+		return m, tail
 	}
 	return m, nil
+}
+
+// handleInputKey routes keys while the command prompt is open: enter runs
+// the typed liferay command against the active worktree, esc cancels, and
+// everything else edits the input.
+func (m model) handleInputKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch msg.String() {
+	case "esc", "ctrl+c":
+		m.inputMode = false
+		m.cmdInput.Blur()
+		return m, nil
+
+	case "enter":
+		line := strings.TrimSpace(m.cmdInput.Value())
+		m.inputMode = false
+		m.cmdInput.Blur()
+		if line == "" {
+			return m, nil
+		}
+		return m.startCommand(line)
+	}
+
+	var cmd tea.Cmd
+	m.cmdInput, cmd = m.cmdInput.Update(msg)
+	return m, cmd
+}
+
+// startCommand launches `liferay -C <worktree> <line>` with output streamed
+// to a temp log file the drawer tails. One command per worktree at a time.
+func (m model) startCommand(line string) (tea.Model, tea.Cmd) {
+	index := m.active
+	if m.runs[index].running {
+		m.note[index] = "a command is already running for this worktree"
+		return m, nil
+	}
+
+	logFile, err := os.CreateTemp("", "liferay-dashboard-*.log")
+	if err != nil {
+		m.note[index] = err.Error()
+		return m, nil
+	}
+
+	args := append([]string{"-C", m.cfg.Worktrees[index].Path}, strings.Fields(line)...)
+
+	cmd := exec.Command(m.cfg.SelfExe, args...)
+	cmd.Stdout = logFile
+	cmd.Stderr = logFile
+	if err := cmd.Start(); err != nil {
+		logFile.Close()
+		m.note[index] = err.Error()
+		return m, nil
+	}
+
+	m.runs[index] = runState{cmd: cmd, line: line, logPath: logFile.Name(), running: true}
+	m.note[index] = ""
+	m.showLogs = true
+	m.logSrc[index] = srcCommand
+	m.logView.Height = m.logHeight()
+	m.logView.SetContent("")
+
+	return m, tea.Batch(waitCmd(index, cmd, logFile), logCmd(index, logFile.Name()))
+}
+
+// waitCmd reaps the command once it exits. The log file is closed here, not
+// in startCommand, because the child writes to it until then.
+func waitCmd(index int, cmd *exec.Cmd, logFile *os.File) tea.Cmd {
+	return func() tea.Msg {
+		err := cmd.Wait()
+		logFile.Close()
+		return cmdDoneMsg{index: index, err: err}
+	}
+}
+
+// tailNow returns the refresh command for the drawer's current source, or
+// nil when the drawer is closed or the source has no file yet.
+func (m model) tailNow() tea.Cmd {
+	if !m.showLogs {
+		return nil
+	}
+	if m.logSrc[m.active] == srcCommand && m.runs[m.active].logPath != "" {
+		return logCmd(m.active, m.runs[m.active].logPath)
+	}
+	if catOut := m.statuses[m.active].CatOut; catOut != "" {
+		return logCmd(m.active, catOut)
+	}
+	return nil
 }
 
 // portalURL prefers the slot-pool hostname so virtual-instance cookies and
@@ -351,19 +510,35 @@ func (m model) View() string {
 	b.WriteString(m.viewPanel())
 
 	if m.showLogs {
-		st := m.statuses[m.active]
-		title := st.CatOut
-		if title == "" {
-			title = "no bundle log"
-		}
-		b.WriteString("\n" + dimStyle.Render("── "+title+" ") + "\n")
+		b.WriteString("\n" + dimStyle.Render("── "+m.drawerTitle()+" ") + "\n")
 		b.WriteString(m.logView.View())
 	}
 
-	b.WriteString("\n" + dimStyle.Render(
-		"←/→ tabs · o open · s start · x stop · r restart · l logs · u refresh · q quit"))
+	if m.inputMode {
+		b.WriteString("\n" + m.cmdInput.View())
+	} else {
+		b.WriteString("\n" + dimStyle.Render(
+			"←/→ tabs · o open · s start · x stop · r restart · : run · l logs · u refresh · q quit"))
+	}
 
 	return b.String()
+}
+
+func (m model) drawerTitle() string {
+	if m.logSrc[m.active] == srcCommand {
+		run := m.runs[m.active]
+		if run.logPath != "" {
+			title := "$ liferay " + run.line
+			if run.running {
+				return title + " (running)"
+			}
+			return title + " (finished)"
+		}
+	}
+	if catOut := m.statuses[m.active].CatOut; catOut != "" {
+		return catOut
+	}
+	return "no bundle log"
 }
 
 func (m model) viewTabs() string {
@@ -423,6 +598,8 @@ func (m model) viewPanel() string {
 
 	if verb := m.action[m.active]; verb != "" {
 		b.WriteString("\n" + dimStyle.Render(fmt.Sprintf("server %s in progress...", verb)) + "\n")
+	} else if run := m.runs[m.active]; run.running {
+		b.WriteString("\n" + dimStyle.Render(fmt.Sprintf("running: liferay %s ...", run.line)) + "\n")
 	} else if note := m.note[m.active]; note != "" {
 		b.WriteString("\n" + noteStyle.Render(note) + "\n")
 	}
