@@ -26,6 +26,9 @@ type Worktree struct {
 // Config carries everything Run needs that the model cannot derive itself.
 type Config struct {
 	Worktrees []Worktree
+	// Active is the tab selected at startup — the worktree the dashboard
+	// was launched from.
+	Active int
 	// SelfExe is the liferay binary to shell out to for server actions.
 	SelfExe string
 }

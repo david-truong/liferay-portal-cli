@@ -102,8 +102,14 @@ func newModel(cfg Config) model {
 	cmdInput.Prompt = "liferay> "
 	cmdInput.Placeholder = "build <module> · test-integration <module> --tests <filter> · ..."
 
+	active := cfg.Active
+	if active < 0 || active >= len(cfg.Worktrees) {
+		active = 0
+	}
+
 	return model{
 		cfg:      cfg,
+		active:   active,
 		statuses: make([]Status, len(cfg.Worktrees)),
 		jira:     map[string]jiraResult{},
 		action:   make([]string, len(cfg.Worktrees)),

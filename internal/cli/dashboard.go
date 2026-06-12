@@ -40,7 +40,8 @@ func init() {
 }
 
 func runDashboard(_ *cobra.Command, _ []string) error {
-	if _, err := findWorktreeRoot(); err != nil {
+	worktreeRoot, err := findWorktreeRoot()
+	if err != nil {
 		return ExitErr(ExitNotInPortal, "not inside a Liferay worktree: %w", err)
 	}
 
@@ -56,8 +57,13 @@ func runDashboard(_ *cobra.Command, _ []string) error {
 
 	hostsContent := readHostsFile()
 
+	active := 0
+
 	worktrees := make([]dashboard.Worktree, 0, len(entries))
-	for _, e := range entries {
+	for i, e := range entries {
+		if e.Path == worktreeRoot {
+			active = i
+		}
 		w := dashboard.Worktree{
 			Path:    e.Path,
 			Branch:  e.Branch,
@@ -81,7 +87,11 @@ func runDashboard(_ *cobra.Command, _ []string) error {
 		return ExitErr(ExitGeneric, "resolving liferay binary: %w", err)
 	}
 
-	return dashboard.Run(dashboard.Config{Worktrees: worktrees, SelfExe: selfExe})
+	return dashboard.Run(dashboard.Config{
+		Worktrees: worktrees,
+		Active:    active,
+		SelfExe:   selfExe,
+	})
 }
 
 func runDashboardInstallHosts(_ *cobra.Command, _ []string) error {

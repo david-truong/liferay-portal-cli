@@ -22,6 +22,20 @@ func testModel() model {
 	return m
 }
 
+func TestInitialActiveTab(t *testing.T) {
+	cfg := testModel().cfg
+
+	cfg.Active = 1
+	if m := newModel(cfg); m.active != 1 {
+		t.Errorf("active = %d, want 1", m.active)
+	}
+
+	cfg.Active = 5
+	if m := newModel(cfg); m.active != 0 {
+		t.Errorf("out-of-range active = %d, want 0", m.active)
+	}
+}
+
 func TestTabSwitching(t *testing.T) {
 	m := testModel()
 
