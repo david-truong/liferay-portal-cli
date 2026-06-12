@@ -1,7 +1,9 @@
 package dashboard
 
 import (
+	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -271,7 +273,12 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		if msg.err != nil {
-			m.logView.SetContent("cannot read log: " + msg.err.Error())
+			if errors.Is(msg.err, fs.ErrNotExist) {
+				m.logView.SetContent(dimStyle.Render(
+					"no log yet — the file appears once the server starts (s)"))
+			} else {
+				m.logView.SetContent("cannot read log: " + msg.err.Error())
+			}
 			return m, nil
 		}
 		atBottom := m.logView.AtBottom()
