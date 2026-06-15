@@ -189,6 +189,54 @@ func TestEscCancelsPromptOnly(t *testing.T) {
 	}
 }
 
+func TestRefreshReloadsSlotInfo(t *testing.T) {
+	m := testModel()
+	m.cfg.Reload = func() []Worktree {
+		return []Worktree{
+			{Path: "/w/master", Branch: "master", Slot: 0, Primary: true},
+			// The second worktree has since claimed a slot and an engine.
+			{Path: "/w/LPD-1", Branch: "LPD-1", Slot: 3, Engine: "postgres", Ticket: "LPD-1"},
+		}
+	}
+
+	_, cmd := m.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'u'}})
+
+	batch, ok := cmd().(tea.BatchMsg)
+	if !ok {
+		t.Fatal("expected a tea.BatchMsg from refresh")
+	}
+	var reloaded worktreesMsg
+	for _, c := range batch {
+		if msg, ok := c().(worktreesMsg); ok {
+			reloaded = msg
+		}
+	}
+	if reloaded == nil {
+		t.Fatal("refresh did not issue a worktrees reload")
+	}
+
+	next, _ := m.Update(reloaded)
+	m = next.(model)
+
+	if got := m.cfg.Worktrees[1].Slot; got != 3 {
+		t.Errorf("slot = %d, want 3 after reload", got)
+	}
+	if got := m.cfg.Worktrees[1].Engine; got != "postgres" {
+		t.Errorf("engine = %q, want postgres after reload", got)
+	}
+	if got := len(m.cfg.Worktrees); got != 2 {
+		t.Errorf("tab count = %d, want 2 (alignment preserved)", got)
+	}
+}
+
+func TestRefreshWithoutReloadHook(t *testing.T) {
+	m := testModel()
+
+	if _, cmd := m.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'u'}}); cmd == nil {
+		t.Fatal("refresh with no Reload hook did nothing")
+	}
+}
+
 func TestViewFitsTerminalHeight(t *testing.T) {
 	m := testModel()
 	m.logView = viewport.New(m.width-2, 5)

@@ -45,14 +45,44 @@ func runDashboard(_ *cobra.Command, _ []string) error {
 		return ExitErr(ExitNotInPortal, "not inside a Liferay worktree: %w", err)
 	}
 
+	worktrees, active, err := discoverWorktrees(worktreeRoot)
+	if err != nil {
+		return err
+	}
+
+	selfExe, err := os.Executable()
+	if err != nil {
+		return ExitErr(ExitGeneric, "resolving liferay binary: %w", err)
+	}
+
+	return dashboard.Run(dashboard.Config{
+		Worktrees: worktrees,
+		Active:    active,
+		SelfExe:   selfExe,
+		Reload: func() []dashboard.Worktree {
+			worktrees, _, err := discoverWorktrees(worktreeRoot)
+			if err != nil {
+				return nil
+			}
+			return worktrees
+		},
+	})
+}
+
+// discoverWorktrees enumerates the repository's worktrees and resolves each
+// one's slot, database engine, feature flags, and slot hostname. active is
+// the index of worktreeRoot in the returned slice (0 when not found). The
+// dashboard runs this once at startup and again on every refresh, since a
+// slot or engine can be claimed after launch.
+func discoverWorktrees(worktreeRoot string) ([]dashboard.Worktree, int, error) {
 	porcelain, err := gitOutput("worktree", "list", "--porcelain")
 	if err != nil {
-		return ExitErr(ExitGeneric, "listing worktrees: %w", err)
+		return nil, 0, ExitErr(ExitGeneric, "listing worktrees: %w", err)
 	}
 	primary, _ := gitPrimaryRoot("")
 	entries := parseWorktreePorcelain(porcelain, primary)
 	if len(entries) == 0 {
-		return ExitErr(ExitGeneric, "no worktrees found")
+		return nil, 0, ExitErr(ExitGeneric, "no worktrees found")
 	}
 
 	hostsContent := readHostsFile()
@@ -83,16 +113,7 @@ func runDashboard(_ *cobra.Command, _ []string) error {
 		worktrees = append(worktrees, w)
 	}
 
-	selfExe, err := os.Executable()
-	if err != nil {
-		return ExitErr(ExitGeneric, "resolving liferay binary: %w", err)
-	}
-
-	return dashboard.Run(dashboard.Config{
-		Worktrees: worktrees,
-		Active:    active,
-		SelfExe:   selfExe,
-	})
+	return worktrees, active, nil
 }
 
 func runDashboardInstallHosts(_ *cobra.Command, _ []string) error {

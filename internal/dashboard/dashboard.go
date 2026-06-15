@@ -34,6 +34,11 @@ type Config struct {
 	Active int
 	// SelfExe is the liferay binary to shell out to for server actions.
 	SelfExe string
+	// Reload re-discovers worktree metadata (slot, engine, hostname, flags)
+	// so the UI can refresh details that drift after launch — e.g. a slot
+	// claimed or a database engine chosen by a command run later. Returns
+	// nil on failure; the model then keeps its existing metadata.
+	Reload func() []Worktree
 }
 
 // Run blocks until the user quits the TUI.

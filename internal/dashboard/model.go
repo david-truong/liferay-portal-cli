@@ -25,8 +25,9 @@ import (
 const refreshEvery = 2 * time.Second
 
 type (
-	tickMsg     struct{}
-	statusesMsg []Status
+	tickMsg      struct{}
+	statusesMsg  []Status
+	worktreesMsg []Worktree
 
 	jiraMsg struct {
 		key  string
@@ -152,6 +153,15 @@ func probeCmd(worktrees []Worktree) tea.Cmd {
 	}
 }
 
+func reloadCmd(reload func() []Worktree) tea.Cmd {
+	if reload == nil {
+		return nil
+	}
+	return func() tea.Msg {
+		return worktreesMsg(reload())
+	}
+}
+
 func jiraCmd(key string) tea.Cmd {
 	return func() tea.Msg {
 		view, err := FetchIssueView(key)
@@ -226,6 +236,10 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			cmds = append(cmds, tail)
 		}
 		return m, tea.Batch(cmds...)
+
+	case worktreesMsg:
+		m.mergeWorktrees(msg)
+		return m, nil
 
 	case statusesMsg:
 		m.statuses = msg
@@ -376,6 +390,9 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 	case "u":
 		cmds := []tea.Cmd{probeCmd(m.cfg.Worktrees)}
+		if reload := reloadCmd(m.cfg.Reload); reload != nil {
+			cmds = append(cmds, reload)
+		}
 		if w.Ticket != "" {
 			m.jira[w.Ticket] = jiraResult{loading: true}
 			cmds = append(cmds, jiraCmd(w.Ticket))
@@ -491,6 +508,22 @@ func (m model) applyBranchFlags(w Worktree) model {
 		m.note[m.active] = "feature flags: " + err.Error()
 	}
 	return m
+}
+
+// mergeWorktrees folds freshly discovered metadata into the existing tabs,
+// matching by path so the tab order and the per-tab status/run/note slices
+// stay aligned. Tabs whose worktree has vanished keep their last-known
+// metadata; newly added worktrees are ignored until the next launch.
+func (m *model) mergeWorktrees(fresh []Worktree) {
+	byPath := make(map[string]Worktree, len(fresh))
+	for _, w := range fresh {
+		byPath[w.Path] = w
+	}
+	for i := range m.cfg.Worktrees {
+		if w, ok := byPath[m.cfg.Worktrees[i].Path]; ok {
+			m.cfg.Worktrees[i] = w
+		}
+	}
 }
 
 // tailNow returns the refresh command for the drawer's current source, or
