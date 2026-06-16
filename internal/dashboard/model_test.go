@@ -237,6 +237,94 @@ func TestRefreshWithoutReloadHook(t *testing.T) {
 	}
 }
 
+func TestDeleteRequiresConfirmation(t *testing.T) {
+	m := testModel()
+	m.active = 1 // the non-primary LPD-1 worktree
+
+	// ctrl+d only arms the confirmation; nothing is deleted yet.
+	next, cmd := m.handleKey(tea.KeyMsg{Type: tea.KeyCtrlD})
+	m = next.(model)
+	if !m.confirmDelete {
+		t.Fatal("ctrl+d did not arm the delete confirmation")
+	}
+	if cmd != nil {
+		t.Fatal("ctrl+d issued a command before confirmation")
+	}
+	if m.action[1] != "" {
+		t.Fatal("ctrl+d marked the tab busy before confirmation")
+	}
+
+	// A non-"y" key cancels without deleting.
+	next, _ = m.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'n'}})
+	m = next.(model)
+	if m.confirmDelete {
+		t.Fatal("'n' did not cancel the confirmation")
+	}
+	if m.action[1] != "" {
+		t.Fatal("'n' started a delete")
+	}
+}
+
+func TestDeleteConfirmedRunsRemoval(t *testing.T) {
+	m := testModel()
+	m.cfg.SelfExe = "/bin/echo"
+	m.active = 1
+
+	next, _ := m.handleKey(tea.KeyMsg{Type: tea.KeyCtrlD})
+	m = next.(model)
+	next, cmd := m.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'y'}})
+	m = next.(model)
+
+	if m.confirmDelete {
+		t.Fatal("'y' did not close the confirmation")
+	}
+	if m.action[1] != "delete" {
+		t.Fatalf("tab not marked deleting: %q", m.action[1])
+	}
+	if cmd == nil {
+		t.Fatal("'y' did not launch the removal command")
+	}
+
+	msg, ok := cmd().(deleteDoneMsg)
+	if !ok {
+		t.Fatalf("expected a deleteDoneMsg, got %T", cmd())
+	}
+	if msg.err != nil {
+		t.Fatalf("stub removal failed: %v", msg.err)
+	}
+
+	next, _ = m.Update(msg)
+	m = next.(model)
+	if got := len(m.cfg.Worktrees); got != 1 {
+		t.Fatalf("worktree count = %d, want 1 after removal", got)
+	}
+	for _, slice := range [][]int{{len(m.statuses)}, {len(m.action)}, {len(m.note)}, {len(m.logSrc)}} {
+		if slice[0] != 1 {
+			t.Fatalf("per-tab slices not realigned after removal: %d", slice[0])
+		}
+	}
+	if m.cfg.Worktrees[0].Branch != "master" {
+		t.Errorf("surviving tab = %q, want master", m.cfg.Worktrees[0].Branch)
+	}
+	if m.active != 0 {
+		t.Errorf("active = %d, want 0 after removing the last tab", m.active)
+	}
+}
+
+func TestDeletePrimaryBlocked(t *testing.T) {
+	m := testModel()
+	m.active = 0 // master is primary
+
+	next, _ := m.handleKey(tea.KeyMsg{Type: tea.KeyCtrlD})
+	m = next.(model)
+	if m.confirmDelete {
+		t.Fatal("ctrl+d armed deletion of the primary worktree")
+	}
+	if m.note[0] == "" {
+		t.Fatal("no explanation shown when blocking primary deletion")
+	}
+}
+
 func TestViewFitsTerminalHeight(t *testing.T) {
 	m := testModel()
 	m.logView = viewport.New(m.width-2, 5)

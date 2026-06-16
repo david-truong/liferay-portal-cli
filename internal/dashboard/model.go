@@ -51,6 +51,12 @@ type (
 		index int
 		err   error
 	}
+
+	deleteDoneMsg struct {
+		index  int
+		branch string
+		err    error
+	}
 )
 
 type jiraResult struct {
@@ -93,6 +99,10 @@ type model struct {
 
 	inputMode bool
 	cmdInput  textinput.Model
+
+	// confirmDelete gates the destructive ctrl+d worktree removal: the key
+	// arms it, the panel shows a y/n prompt, and only "y" goes through.
+	confirmDelete bool
 
 	width  int
 	height int
@@ -191,6 +201,22 @@ func actionCmd(selfExe string, index int, w Worktree, verb string) tea.Cmd {
 	}
 }
 
+// deleteCmd removes the worktree at targetPath via `liferay worktree remove`.
+// It runs from runDir — the primary worktree — rather than the target, so git
+// is never asked to remove the worktree it is standing in. The CLI stops the
+// slot's Docker stack and Tomcat and deletes the bundle and state dirs itself.
+func deleteCmd(selfExe, runDir, targetPath string, index int, branch string) tea.Cmd {
+	return func() tea.Msg {
+		out, err := exec.Command(
+			selfExe, "-C", runDir, "worktree", "remove", targetPath, "--yes",
+		).CombinedOutput()
+		if err != nil {
+			err = fmt.Errorf("worktree remove: %v\n%s", err, lastLines(string(out), 3))
+		}
+		return deleteDoneMsg{index: index, branch: branch, err: err}
+	}
+}
+
 func logCmd(index int, catOut string) tea.Cmd {
 	return func() tea.Msg {
 		content, err := tailFile(catOut)
@@ -282,6 +308,18 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, tea.Batch(cmds...)
 
+	case deleteDoneMsg:
+		if msg.err != nil {
+			if msg.index < len(m.action) {
+				m.action[msg.index] = ""
+				m.note[msg.index] = msg.err.Error()
+			}
+			return m, nil
+		}
+		m.removeTab(msg.index)
+		m.logView.Height = m.availLogHeight()
+		return m, probeCmd(m.cfg.Worktrees)
+
 	case logMsg:
 		if msg.index != m.active || !m.showLogs {
 			return m, nil
@@ -309,6 +347,9 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	if m.confirmDelete {
+		return m.handleConfirmDelete(msg)
+	}
 	if m.inputMode {
 		return m.handleInputKey(msg)
 	}
@@ -356,6 +397,18 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				{"db", "restart"},
 				{"server", "start"},
 			})
+
+	case "ctrl+d":
+		if w.Primary {
+			m.note[m.active] = "cannot delete the primary worktree"
+			return m, nil
+		}
+		if m.action[m.active] != "" || m.runs[m.active].running {
+			m.note[m.active] = "finish the running action before deleting"
+			return m, nil
+		}
+		m.confirmDelete = true
+		return m, nil
 
 	case ":":
 		m.inputMode = true
@@ -440,6 +493,61 @@ func (m model) handleInputKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	var cmd tea.Cmd
 	m.cmdInput, cmd = m.cmdInput.Update(msg)
 	return m, cmd
+}
+
+// handleConfirmDelete resolves the armed worktree removal: "y" runs it, any
+// other key cancels.
+func (m model) handleConfirmDelete(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	m.confirmDelete = false
+	if s := msg.String(); s == "y" || s == "Y" {
+		return m.startDelete()
+	}
+	return m, nil
+}
+
+// startDelete shells out to remove the active worktree, marking the tab busy
+// so it ignores further actions until deleteDoneMsg lands.
+func (m model) startDelete() (tea.Model, tea.Cmd) {
+	index := m.active
+	w := m.cfg.Worktrees[index]
+	m.action[index] = "delete"
+	m.note[index] = ""
+	return m, deleteCmd(m.cfg.SelfExe, m.primaryPath(), w.Path, index, tabLabel(w))
+}
+
+// primaryPath is the main worktree's path — the safe cwd for git to remove a
+// sibling worktree from. Falls back to the target's parent if no primary is
+// tagged (it always is in practice).
+func (m model) primaryPath() string {
+	for _, w := range m.cfg.Worktrees {
+		if w.Primary {
+			return w.Path
+		}
+	}
+	return filepath.Dir(m.cfg.Worktrees[m.active].Path)
+}
+
+// removeTab drops tab i from every per-tab slice in lockstep so they stay
+// aligned, then clamps active onto a surviving tab.
+func (m *model) removeTab(i int) {
+	if i < 0 || i >= len(m.cfg.Worktrees) {
+		return
+	}
+	m.cfg.Worktrees = append(m.cfg.Worktrees[:i], m.cfg.Worktrees[i+1:]...)
+	if i < len(m.statuses) {
+		m.statuses = append(m.statuses[:i], m.statuses[i+1:]...)
+	}
+	m.action = append(m.action[:i], m.action[i+1:]...)
+	m.note = append(m.note[:i], m.note[i+1:]...)
+	m.runs = append(m.runs[:i], m.runs[i+1:]...)
+	m.logSrc = append(m.logSrc[:i], m.logSrc[i+1:]...)
+
+	if m.active >= len(m.cfg.Worktrees) {
+		m.active = len(m.cfg.Worktrees) - 1
+	}
+	if m.active < 0 {
+		m.active = 0
+	}
 }
 
 // startCommand launches `liferay -C <worktree> <line>` with output streamed
@@ -634,9 +742,13 @@ func (m model) View() string {
 
 	if m.inputMode {
 		b.WriteString("\n" + m.cmdInput.View())
+	} else if m.confirmDelete {
+		b.WriteString("\n" + noteStyle.Render(fmt.Sprintf(
+			"Delete worktree %s and its bundle? This cannot be undone.  (y/n)",
+			tabLabel(m.cfg.Worktrees[m.active]))))
 	} else {
 		b.WriteString("\n" + dimStyle.Render(
-			"←/→ tabs · o open · s start · x stop · r restart · w reset · : run · l logs · u refresh · q quit"))
+			"←/→ tabs · o open · s start · x stop · r restart · w reset · ctrl+d delete · : run · l logs · u refresh · q quit"))
 	}
 
 	return b.String()
@@ -718,7 +830,11 @@ func (m model) viewPanel() string {
 	b.WriteString(m.viewJira(w))
 
 	if verb := m.action[m.active]; verb != "" {
-		b.WriteString("\n" + dimStyle.Render(fmt.Sprintf("server %s in progress...", verb)) + "\n")
+		progress := fmt.Sprintf("server %s in progress...", verb)
+		if verb == "delete" {
+			progress = "removing worktree..."
+		}
+		b.WriteString("\n" + dimStyle.Render(progress) + "\n")
 	} else if run := m.runs[m.active]; run.running {
 		b.WriteString("\n" + dimStyle.Render(fmt.Sprintf("running: liferay %s ...", run.line)) + "\n")
 	} else if note := m.note[m.active]; note != "" {

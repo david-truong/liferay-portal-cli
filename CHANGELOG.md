@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed — `dashboard` command
+
+- `u` (refresh) now also re-discovers each worktree's slot, database engine,
+  slot hostname, and feature flags, so details that drift after launch (a slot
+  or engine claimed by a later command) update without restarting the
+  dashboard.
+
+### Added — `dashboard` command
+
+- `ctrl+d` removes the selected worktree (git worktree, bundle, and CLI state)
+  after a `y`/`n` confirmation, stopping its Docker stack and Tomcat first. The
+  primary worktree cannot be deleted, and the key is ignored while a server
+  action or command is running for that tab.
+
 ## [v1.2.0] - 2026-06-12
 
 ### Added — `dashboard` command
