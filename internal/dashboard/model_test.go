@@ -325,6 +325,31 @@ func TestDeletePrimaryBlocked(t *testing.T) {
 	}
 }
 
+func TestWrapTabsBreaksOnNarrowWidth(t *testing.T) {
+	tabs := []string{
+		tabStyle.Render("alpha"),
+		tabStyle.Render("bravo"),
+		tabStyle.Render("charlie"),
+	}
+
+	// Wide enough for everything: one row.
+	if got := strings.Count(wrapTabs(tabs, 200), "\n"); got != 0 {
+		t.Errorf("wide layout has %d breaks, want 0", got)
+	}
+
+	// Narrow enough that not all tabs fit: at least one break, and every tab
+	// survives the wrap.
+	wrapped := wrapTabs(tabs, 12)
+	if strings.Count(wrapped, "\n") == 0 {
+		t.Error("narrow layout did not wrap")
+	}
+	for _, label := range []string{"alpha", "bravo", "charlie"} {
+		if !strings.Contains(wrapped, label) {
+			t.Errorf("wrapped tabs dropped %q:\n%s", label, wrapped)
+		}
+	}
+}
+
 func TestViewFitsTerminalHeight(t *testing.T) {
 	m := testModel()
 	m.logView = viewport.New(m.width-2, 5)

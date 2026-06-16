@@ -781,7 +781,34 @@ func (m model) viewTabs() string {
 			tabs[i] = tabStyle.Render(label)
 		}
 	}
-	return lipgloss.JoinHorizontal(lipgloss.Top, tabs...)
+	return wrapTabs(tabs, m.width)
+}
+
+// wrapTabs lays the tabs left to right, breaking to a new row when the next
+// tab would overflow the terminal width, so every tab stays visible on a
+// narrow terminal instead of being clipped. width <= 0 keeps them on one row.
+func wrapTabs(tabs []string, width int) string {
+	if len(tabs) == 0 {
+		return ""
+	}
+
+	var rows []string
+	var row []string
+	rowWidth := 0
+
+	for _, tab := range tabs {
+		w := lipgloss.Width(tab)
+		if len(row) > 0 && width > 0 && rowWidth+w > width {
+			rows = append(rows, lipgloss.JoinHorizontal(lipgloss.Top, row...))
+			row = nil
+			rowWidth = 0
+		}
+		row = append(row, tab)
+		rowWidth += w
+	}
+	rows = append(rows, lipgloss.JoinHorizontal(lipgloss.Top, row...))
+
+	return strings.Join(rows, "\n")
 }
 
 func tabLabel(w Worktree) string {

@@ -17,6 +17,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed — `dashboard` command
 
+- The worktree tabs wrap onto multiple rows when the terminal is too narrow to
+  fit them on one line, so no tab is clipped.
 - `u` (refresh) now also re-discovers each worktree's slot, database engine,
   slot hostname, and feature flags, so details that drift after launch (a slot
   or engine claimed by a later command) update without restarting the
