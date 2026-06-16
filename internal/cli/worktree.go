@@ -376,29 +376,29 @@ func removeWorktree(absTarget string, assumeYes bool, in io.Reader, out io.Write
 			"worktree remove declined — pass --yes or set %s=1 to skip the prompt", AssumeYesEnvVar)
 	}
 
+	// git worktree remove refuses to remove the main worktree; keep that
+	// guard, since deleting the directory ourselves below would not.
+	if isPrimaryWorktree(absTarget) {
+		return ExitErr(ExitGeneric,
+			"refusing to remove the primary worktree at %s", absTarget)
+	}
+
 	stateDir := state.Dir(absTarget)
-	bundleDir := filepath.Join(absTarget, bundleSubdirName)
 
 	// Stop the slot's Docker stack and Tomcat before deleting anything, so
 	// the removal doesn't leak running containers or a Tomcat process.
 	dockerState, hasSlot := docker.LoadState(absTarget)
 	stopSlotRuntime(stateDir, absTarget, dockerState.Slot, hasSlot)
 
-	// git worktree remove refuses while the working tree is dirty, and the
-	// deployed .bundles/ plus build outputs always leave it so — that is the
-	// "Directory not empty" failure. Delete the bundle and discard every
-	// tracked, untracked, and ignored change first so the removal is clean.
-	removeDir(bundleDir)
-	if fsutil.Exists(absTarget) {
-		if err := gitRun("-C", absTarget, "reset", "--hard"); err != nil {
-			fmt.Printf("warning: could not reset %s: %v\n", absTarget, err)
-		}
-		if err := gitRun("-C", absTarget, "clean", "-ffdx"); err != nil {
-			fmt.Printf("warning: could not clean %s: %v\n", absTarget, err)
-		}
-	}
-
-	if err := gitRun("worktree", "remove", "--force", absTarget); err != nil {
+	// Delete the worktree directory outright rather than asking git to empty
+	// it. "git worktree remove" refuses while the tree is dirty (the deployed
+	// .bundles/ and build outputs always leave it so — the "Directory not
+	// empty" failure), and "git clean -ffdx" gitignore-checks every file in
+	// the monorepo, which takes minutes. A bulk remove plus "git worktree
+	// prune" — which drops the entry once its directory is gone — is far
+	// faster and needs no clean step.
+	removeDir(absTarget)
+	if err := gitRun("worktree", "prune"); err != nil {
 		return err
 	}
 

@@ -9,11 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed — `worktree remove`
 
-- `liferay worktree remove` now deletes the `.bundles/` directory and discards
-  all tracked, untracked, and ignored changes (`git reset --hard` + `git clean
-  -ffdx`) before `git worktree remove --force`, so removal no longer fails with
-  "Directory not empty" when the worktree holds a deployed bundle or build
-  output.
+- `liferay worktree remove` now deletes the worktree directory in bulk and then
+  runs `git worktree prune`, instead of `git worktree remove`. This avoids the
+  "Directory not empty" failure when the worktree holds a deployed `.bundles/`
+  or build output, and is dramatically faster than gitignore-checking every
+  file in the monorepo (`git clean -ffdx`), which could take minutes. The
+  primary worktree is refused, preserving git's own guard.
 
 ### Changed — `dashboard` command
 
