@@ -18,6 +18,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed — `dashboard` command
 
+- `u` (refresh) now drops tabs whose worktree no longer exists — deleted from
+  the dashboard or elsewhere — instead of keeping a stale tab until the next
+  launch. A failed `ctrl+d` removal also reconciles, so a tab clears when its
+  worktree did vanish despite the error.
 - The worktree tabs wrap onto multiple rows when the terminal is too narrow to
   fit them on one line, so no tab is clipped.
 - `u` (refresh) now also re-discovers each worktree's slot, database engine,

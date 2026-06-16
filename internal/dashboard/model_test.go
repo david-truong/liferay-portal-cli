@@ -229,6 +229,32 @@ func TestRefreshReloadsSlotInfo(t *testing.T) {
 	}
 }
 
+func TestRefreshDropsVanishedTab(t *testing.T) {
+	m := testModel()
+	m.active = 1 // on LPD-1
+	m.statuses = make([]Status, len(m.cfg.Worktrees))
+
+	// LPD-1's worktree is gone; only master comes back from discovery.
+	m.mergeWorktrees([]Worktree{
+		{Path: "/w/master", Branch: "master", Slot: 0, Primary: true},
+	})
+
+	if got := len(m.cfg.Worktrees); got != 1 {
+		t.Fatalf("worktree count = %d, want 1 after the tab vanished", got)
+	}
+	if m.cfg.Worktrees[0].Branch != "master" {
+		t.Errorf("surviving tab = %q, want master", m.cfg.Worktrees[0].Branch)
+	}
+	for _, n := range []int{len(m.statuses), len(m.action), len(m.note), len(m.runs), len(m.logSrc)} {
+		if n != 1 {
+			t.Fatalf("per-tab slices not realigned: got length %d", n)
+		}
+	}
+	if m.active != 0 {
+		t.Errorf("active = %d, want 0 after its tab was dropped", m.active)
+	}
+}
+
 func TestRefreshWithoutReloadHook(t *testing.T) {
 	m := testModel()
 

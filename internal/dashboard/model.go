@@ -265,6 +265,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case worktreesMsg:
 		m.mergeWorktrees(msg)
+		m.logView.Height = m.availLogHeight()
 		return m, nil
 
 	case statusesMsg:
@@ -314,7 +315,9 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.action[msg.index] = ""
 				m.note[msg.index] = msg.err.Error()
 			}
-			return m, nil
+			// The worktree may be gone even though the command reported an
+			// error (e.g. interrupted mid-run); reconcile to drop a dead tab.
+			return m, reloadCmd(m.cfg.Reload)
 		}
 		m.removeTab(msg.index)
 		m.logView.Height = m.availLogHeight()
@@ -618,18 +621,64 @@ func (m model) applyBranchFlags(w Worktree) model {
 	return m
 }
 
-// mergeWorktrees folds freshly discovered metadata into the existing tabs,
-// matching by path so the tab order and the per-tab status/run/note slices
-// stay aligned. Tabs whose worktree has vanished keep their last-known
-// metadata; newly added worktrees are ignored until the next launch.
+// mergeWorktrees reconciles the tabs with freshly discovered worktrees,
+// matched by path: surviving tabs take the fresh metadata (slot, engine,
+// hostname, flags) and keep their per-tab status/run/note state, while tabs
+// whose worktree has vanished — deleted here or elsewhere — are dropped. Newly
+// added worktrees are ignored until the next launch. Active follows its tab.
 func (m *model) mergeWorktrees(fresh []Worktree) {
 	byPath := make(map[string]Worktree, len(fresh))
 	for _, w := range fresh {
 		byPath[w.Path] = w
 	}
-	for i := range m.cfg.Worktrees {
-		if w, ok := byPath[m.cfg.Worktrees[i].Path]; ok {
-			m.cfg.Worktrees[i] = w
+
+	activePath := ""
+	if m.active < len(m.cfg.Worktrees) {
+		activePath = m.cfg.Worktrees[m.active].Path
+	}
+
+	var (
+		worktrees []Worktree
+		statuses  []Status
+		action    []string
+		note      []string
+		runs      []runState
+		logSrc    []int
+	)
+	for i, w := range m.cfg.Worktrees {
+		updated, ok := byPath[w.Path]
+		if !ok {
+			continue
+		}
+		worktrees = append(worktrees, updated)
+		if i < len(m.statuses) {
+			statuses = append(statuses, m.statuses[i])
+		} else {
+			statuses = append(statuses, Status{})
+		}
+		action = append(action, m.action[i])
+		note = append(note, m.note[i])
+		runs = append(runs, m.runs[i])
+		logSrc = append(logSrc, m.logSrc[i])
+	}
+
+	// Never blank the UI; the primary worktree should always survive.
+	if len(worktrees) == 0 {
+		return
+	}
+
+	m.cfg.Worktrees = worktrees
+	m.statuses = statuses
+	m.action = action
+	m.note = note
+	m.runs = runs
+	m.logSrc = logSrc
+
+	m.active = 0
+	for i, w := range worktrees {
+		if w.Path == activePath {
+			m.active = i
+			break
 		}
 	}
 }
