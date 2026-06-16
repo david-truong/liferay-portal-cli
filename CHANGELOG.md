@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed — `worktree remove`
+
+- `liferay worktree remove` now deletes the `.bundles/` directory and discards
+  all tracked, untracked, and ignored changes (`git reset --hard` + `git clean
+  -ffdx`) before `git worktree remove --force`, so removal no longer fails with
+  "Directory not empty" when the worktree holds a deployed bundle or build
+  output.
+
 ### Changed — `dashboard` command
 
 - `u` (refresh) now also re-discovers each worktree's slot, database engine,

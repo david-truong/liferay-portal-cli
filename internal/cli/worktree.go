@@ -384,21 +384,39 @@ func removeWorktree(absTarget string, assumeYes bool, in io.Reader, out io.Write
 	dockerState, hasSlot := docker.LoadState(absTarget)
 	stopSlotRuntime(stateDir, absTarget, dockerState.Slot, hasSlot)
 
-	if err := gitRun("worktree", "remove", absTarget); err != nil {
+	// git worktree remove refuses while the working tree is dirty, and the
+	// deployed .bundles/ plus build outputs always leave it so — that is the
+	// "Directory not empty" failure. Delete the bundle and discard every
+	// tracked, untracked, and ignored change first so the removal is clean.
+	removeDir(bundleDir)
+	if fsutil.Exists(absTarget) {
+		if err := gitRun("-C", absTarget, "reset", "--hard"); err != nil {
+			fmt.Printf("warning: could not reset %s: %v\n", absTarget, err)
+		}
+		if err := gitRun("-C", absTarget, "clean", "-ffdx"); err != nil {
+			fmt.Printf("warning: could not clean %s: %v\n", absTarget, err)
+		}
+	}
+
+	if err := gitRun("worktree", "remove", "--force", absTarget); err != nil {
 		return err
 	}
 
-	for _, dir := range []string{stateDir, bundleDir} {
-		if fsutil.Exists(dir) {
-			fmt.Printf("Removing %s ... ", dir)
-			if err := os.RemoveAll(dir); err != nil {
-				fmt.Printf("error: %v\n", err)
-			} else {
-				fmt.Println("done")
-			}
-		}
-	}
+	removeDir(stateDir)
 	return nil
+}
+
+// removeDir deletes dir if present, narrating the outcome.
+func removeDir(dir string) {
+	if !fsutil.Exists(dir) {
+		return
+	}
+	fmt.Printf("Removing %s ... ", dir)
+	if err := os.RemoveAll(dir); err != nil {
+		fmt.Printf("error: %v\n", err)
+	} else {
+		fmt.Println("done")
+	}
 }
 
 func runWorktreePrune(_ *cobra.Command, _ []string) error {
