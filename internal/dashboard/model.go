@@ -337,7 +337,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		atBottom := m.logView.AtBottom()
-		m.logView.SetContent(msg.content)
+		m.logView.SetContent(softWrap(msg.content, m.logView.Width))
 		if atBottom {
 			m.logView.GotoBottom()
 		}
@@ -710,16 +710,19 @@ func (m model) portalURL(w Worktree) string {
 	return fmt.Sprintf("http://%s:%d/", host, ports.TomcatHTTP)
 }
 
-// availLogHeight measures the rendered chrome (tabs, panel, drawer title,
-// footer) and returns the rows left for the log body, so the full view
-// always fits the terminal without scrolling. The panel height varies with
-// the Jira block, flags, and notes, so this is recomputed as they change.
+// availLogHeight returns the rows left for the log body after the surrounding
+// chrome (tabs, panel, drawer title, footer) is laid out, so the full view
+// always fits the terminal without scrolling. It measures the real chrome
+// string — which wraps with the terminal width — so wrapped tabs, panel
+// values, or footer never push the view past the bottom.
 func (m model) availLogHeight() int {
-	chrome := lipgloss.Height(m.viewTabs()+"\n\n"+m.viewPanel()) +
-		1 + // drawer title line
-		2 // footer/input line and its separating newline
+	parts := m.viewTabs() + "\n\n" + m.viewPanel()
+	if m.showLogs {
+		parts += "\n" + m.drawerTitleLine()
+	}
+	parts += "\n" + m.viewFooter()
 
-	h := m.height - chrome
+	h := m.height - lipgloss.Height(parts)
 	if h < 3 {
 		h = 3
 	}
@@ -776,31 +779,40 @@ func (m model) View() string {
 		return "loading..."
 	}
 
-	var b strings.Builder
-
-	b.WriteString(m.viewTabs())
-	b.WriteString("\n\n")
-	b.WriteString(m.viewPanel())
+	parts := m.viewTabs() + "\n\n" + m.viewPanel()
 
 	if m.showLogs {
 		logView := m.logView
 		logView.Height = m.availLogHeight()
-		b.WriteString("\n" + dimStyle.Render("── "+m.drawerTitle()+" ") + "\n")
-		b.WriteString(logView.View())
+		parts += "\n" + m.drawerTitleLine() + "\n" + logView.View()
 	}
 
+	parts += "\n" + m.viewFooter()
+
+	return parts
+}
+
+// drawerTitleLine renders the drawer's "── title ──" header, wrapped so a long
+// command line or log path does not overflow the terminal.
+func (m model) drawerTitleLine() string {
+	return softWrap(dimStyle.Render("── "+m.drawerTitle()+" "), m.width)
+}
+
+// viewFooter renders the bottom line — the command prompt, the delete
+// confirmation, or the key help — wrapped to the terminal width. The command
+// input is left unwrapped so its cursor renders correctly.
+func (m model) viewFooter() string {
 	if m.inputMode {
-		b.WriteString("\n" + m.cmdInput.View())
-	} else if m.confirmDelete {
-		b.WriteString("\n" + noteStyle.Render(fmt.Sprintf(
-			"Delete worktree %s and its bundle? This cannot be undone.  (y/n)",
-			tabLabel(m.cfg.Worktrees[m.active]))))
-	} else {
-		b.WriteString("\n" + dimStyle.Render(
-			"←/→ tabs · o open · s start · x stop · r restart · w reset · ctrl+d delete · : run · l logs · u refresh · q quit"))
+		return m.cmdInput.View()
 	}
-
-	return b.String()
+	if m.confirmDelete {
+		return softWrap(noteStyle.Render(fmt.Sprintf(
+			"Delete worktree %s and its bundle? This cannot be undone.  (y/n)",
+			tabLabel(m.cfg.Worktrees[m.active]))), m.width)
+	}
+	return softWrap(dimStyle.Render(
+		"←/→ tabs · o open · s start · x stop · r restart · w reset · ctrl+d delete · : run · l logs · u refresh · q quit"),
+		m.width)
 }
 
 func (m model) drawerTitle() string {
@@ -831,6 +843,16 @@ func (m model) viewTabs() string {
 		}
 	}
 	return wrapTabs(tabs, m.width)
+}
+
+// softWrap wraps content to width so long lines (log stack traces, long paths,
+// the footer help, panel values) stay on screen instead of being clipped.
+// width <= 0 leaves the content untouched.
+func softWrap(content string, width int) string {
+	if width <= 0 {
+		return content
+	}
+	return lipgloss.NewStyle().Width(width).Render(content)
 }
 
 // wrapTabs lays the tabs left to right, breaking to a new row when the next
@@ -922,7 +944,7 @@ func (m model) viewPanel() string {
 			"slot hostnames not installed — run: sudo liferay dashboard install-hosts") + "\n")
 	}
 
-	return b.String()
+	return softWrap(b.String(), m.width)
 }
 
 // viewFlags lists the branch's feature flags with their current state in

@@ -18,6 +18,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed — `dashboard` command
 
+- All content now soft-wraps to the terminal width instead of being clipped:
+  the log drawer (long stack traces and paths), the worktree panel (long paths,
+  URLs, and Jira summaries), the drawer title, and the key-help footer. The log
+  height accounting was reworked to measure the real wrapped chrome so the view
+  still fits the terminal.
 - `u` (refresh) now drops tabs whose worktree no longer exists — deleted from
   the dashboard or elsewhere — instead of keeping a stale tab until the next
   launch. A failed `ctrl+d` removal also reconciles, so a tab clears when its

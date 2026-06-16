@@ -391,6 +391,33 @@ func TestViewFitsTerminalHeight(t *testing.T) {
 	}
 }
 
+// TestViewFitsNarrowTerminal exercises the wrapping paths: a long log line,
+// path, and footer must wrap to the width without pushing the view past the
+// terminal height or beyond its width.
+func TestViewFitsNarrowTerminal(t *testing.T) {
+	m := testModel()
+	m.cfg.Worktrees[0].Path = "/very/long/path/to/a/worktree/that/will/not/fit/on/a/narrow/terminal/at/all"
+	m.logView = viewport.New(0, 5)
+	m.jira["LPD-1"] = jiraResult{view: "LPD-1  A fairly long Jira summary that should wrap around\n  Status: Open"}
+
+	const height = 50
+	m.height = height
+
+	for _, width := range []int{40, 30, 24} {
+		m.width = width
+		m.logView.Width = width - 2
+		m.logView.SetContent(softWrap(strings.Repeat("a very long log line without any breaks ", 10), m.logView.Width))
+
+		view := m.View()
+		if got := lipgloss.Width(view); got > width {
+			t.Errorf("width %d: view is %d columns wide (not wrapped)", width, got)
+		}
+		if got := lipgloss.Height(view); got > height {
+			t.Errorf("width %d: view is %d lines for a %d-line terminal", width, got, height)
+		}
+	}
+}
+
 func TestViewShowsJiraBlock(t *testing.T) {
 	m := testModel()
 	m.active = 1
