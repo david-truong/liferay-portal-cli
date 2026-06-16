@@ -124,13 +124,19 @@ func Status(paths Paths) (int, bool) {
 // Wipe removes the bundle subdirectories that hold derived state (data,
 // logs, osgi/state, work) plus portal-setup-wizard.properties, so the next
 // boot starts clean against a fresh DB. Matches upstream StartTestableTomcatTask.
-func Wipe(paths Paths) []string {
+//
+// When keepSetupWizard is true the wizard file is preserved — slot 0 is the
+// untouched stock checkout whose wizard is the user's to manage, not the CLI's.
+func Wipe(paths Paths, keepSetupWizard bool) []string {
 	targets := []string{
 		filepath.Join(paths.Bundle, "data"),
 		filepath.Join(paths.Bundle, "logs"),
 		filepath.Join(paths.Bundle, "osgi", "state"),
 		filepath.Join(paths.Tomcat, "work"),
-		filepath.Join(paths.Bundle, "portal-setup-wizard.properties"),
+	}
+	if !keepSetupWizard {
+		targets = append(
+			targets, filepath.Join(paths.Bundle, "portal-setup-wizard.properties"))
 	}
 
 	removed := make([]string, 0, len(targets))

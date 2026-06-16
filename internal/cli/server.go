@@ -74,7 +74,7 @@ var serverLogsCmd = &cobra.Command{
 
 var serverWipeCmd = &cobra.Command{
 	Use:   "wipe",
-	Short: "Stop Tomcat and delete data/logs/osgi-state/work and portal-setup-wizard.properties",
+	Short: "Stop Tomcat and delete data/logs/osgi-state/work (and portal-setup-wizard.properties, except on slot 0)",
 	RunE:  runServerWipe,
 }
 
@@ -251,7 +251,7 @@ func runServerWipe(_ *cobra.Command, _ []string) error {
 // declined wipe never touches the filesystem.
 func wipeServer(assumeYes bool, in io.Reader, out io.Writer, isTTY bool) error {
 	if !confirmWithIO(
-		"This will delete data/, logs/, osgi/state/, work/, and portal-setup-wizard.properties from the active bundle.",
+		"This will delete data/, logs/, osgi/state/, and work/ from the active bundle (and portal-setup-wizard.properties, except on slot 0).",
 		assumeYes, in, out, isTTY,
 	) {
 		return ExitErr(ExitConfirmationDeclined,
@@ -267,7 +267,11 @@ func wipeServer(assumeYes bool, in io.Reader, out io.Writer, isTTY bool) error {
 			fmt.Fprintf(os.Stderr, "warning: stop failed: %v\n", err)
 		}
 	}
-	removed := tomcat.Wipe(paths)
+	worktreeRoot, err := findWorktreeRoot()
+	if err != nil {
+		return err
+	}
+	removed := tomcat.Wipe(paths, currentSlot(worktreeRoot) == 0)
 	for _, p := range removed {
 		fmt.Printf("Removed %s\n", p)
 	}
@@ -315,6 +319,19 @@ func resolvePaths() (tomcat.Paths, error) {
 			"%w\n\nRun \"ant all\" or \"liferay build\" to populate the bundle first", err)
 	}
 	return paths, nil
+}
+
+// currentSlot resolves the bundle's slot from persisted Docker state, falling
+// back to slot 0 for a primary checkout that has never started its stack and
+// to -1 (unknown, not stock) for a linked worktree without state.
+func currentSlot(worktreeRoot string) int {
+	if st, ok := docker.LoadState(worktreeRoot); ok {
+		return st.Slot
+	}
+	if isLinkedWorktree(worktreeRoot) {
+		return -1
+	}
+	return 0
 }
 
 func currentStatus() (int, bool) {
