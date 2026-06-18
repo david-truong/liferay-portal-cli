@@ -36,10 +36,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added — `dashboard` command
 
-- `ctrl+d` removes the selected worktree (git worktree, bundle, and CLI state)
-  after a `y`/`n` confirmation, stopping its Docker stack and Tomcat first. The
-  primary worktree cannot be deleted, and the key is ignored while a server
-  action or command is running for that tab.
+- `ctrl+d` removes the selected worktree (git worktree, bundle, and CLI state),
+  stopping its Docker stack and Tomcat first. The first `ctrl+d` arms the
+  removal and a second `ctrl+d` confirms it; any other key cancels. The primary
+  worktree cannot be deleted, and the key is ignored while a server action or
+  command is running for that tab.
 
 ## [v1.2.0] - 2026-06-12
 

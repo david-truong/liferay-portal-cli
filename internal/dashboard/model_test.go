@@ -280,7 +280,7 @@ func TestDeleteRequiresConfirmation(t *testing.T) {
 		t.Fatal("ctrl+d marked the tab busy before confirmation")
 	}
 
-	// A non-"y" key cancels without deleting.
+	// Any key other than a second ctrl+d cancels without deleting.
 	next, _ = m.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'n'}})
 	m = next.(model)
 	if m.confirmDelete {
@@ -298,17 +298,17 @@ func TestDeleteConfirmedRunsRemoval(t *testing.T) {
 
 	next, _ := m.handleKey(tea.KeyMsg{Type: tea.KeyCtrlD})
 	m = next.(model)
-	next, cmd := m.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'y'}})
+	next, cmd := m.handleKey(tea.KeyMsg{Type: tea.KeyCtrlD})
 	m = next.(model)
 
 	if m.confirmDelete {
-		t.Fatal("'y' did not close the confirmation")
+		t.Fatal("second ctrl+d did not close the confirmation")
 	}
 	if m.action[1] != "delete" {
 		t.Fatalf("tab not marked deleting: %q", m.action[1])
 	}
 	if cmd == nil {
-		t.Fatal("'y' did not launch the removal command")
+		t.Fatal("second ctrl+d did not launch the removal command")
 	}
 
 	msg, ok := cmd().(deleteDoneMsg)

@@ -100,8 +100,8 @@ type model struct {
 	inputMode bool
 	cmdInput  textinput.Model
 
-	// confirmDelete gates the destructive ctrl+d worktree removal: the key
-	// arms it, the panel shows a y/n prompt, and only "y" goes through.
+	// confirmDelete gates the destructive ctrl+d worktree removal: the first
+	// ctrl+d arms it, the panel prompts, and a second ctrl+d goes through.
 	confirmDelete bool
 
 	width  int
@@ -498,11 +498,11 @@ func (m model) handleInputKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	return m, cmd
 }
 
-// handleConfirmDelete resolves the armed worktree removal: "y" runs it, any
-// other key cancels.
+// handleConfirmDelete resolves the armed worktree removal: a second ctrl+d
+// runs it, any other key cancels.
 func (m model) handleConfirmDelete(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	m.confirmDelete = false
-	if s := msg.String(); s == "y" || s == "Y" {
+	if msg.String() == "ctrl+d" {
 		return m.startDelete()
 	}
 	return m, nil
@@ -807,7 +807,7 @@ func (m model) viewFooter() string {
 	}
 	if m.confirmDelete {
 		return softWrap(noteStyle.Render(fmt.Sprintf(
-			"Delete worktree %s and its bundle? This cannot be undone.  (y/n)",
+			"Delete worktree %s and its bundle? This cannot be undone.  (ctrl+d again to confirm, any other key cancels)",
 			tabLabel(m.cfg.Worktrees[m.active]))), m.width)
 	}
 	return softWrap(dimStyle.Render(
