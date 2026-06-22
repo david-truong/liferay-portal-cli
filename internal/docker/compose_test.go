@@ -164,3 +164,32 @@ company.default.locale=en_US
 		t.Errorf("stale managed key not stripped:\n%s", got)
 	}
 }
+
+func TestWritePortalExtWhitelistsSlotHost(t *testing.T) {
+	dir := t.TempDir()
+	if err := writePortalExt(dir, EngineMySQL, PortsFromSlot(3)); err != nil {
+		t.Fatalf("writePortalExt: %v", err)
+	}
+	got, err := os.ReadFile(filepath.Join(dir, "portal-ext.properties"))
+	if err != nil {
+		t.Fatalf("read: %v", err)
+	}
+	want := "virtual.hosts.valid.hosts=localhost,127.0.0.1,[::1],[0:0:0:0:0:0:0:1],*.liferay.test"
+	if !strings.Contains(string(got), want) {
+		t.Errorf("missing %q in:\n%s", want, got)
+	}
+}
+
+func TestWritePortalExtStockOmitsSlotHost(t *testing.T) {
+	dir := t.TempDir()
+	if err := writePortalExt(dir, EngineMySQL, PortsFromSlot(0)); err != nil {
+		t.Fatalf("writePortalExt: %v", err)
+	}
+	got, err := os.ReadFile(filepath.Join(dir, "portal-ext.properties"))
+	if err != nil {
+		t.Fatalf("read: %v", err)
+	}
+	if strings.Contains(string(got), "virtual.hosts.valid.hosts") {
+		t.Errorf("stock slot must not override virtual.hosts.valid.hosts:\n%s", got)
+	}
+}

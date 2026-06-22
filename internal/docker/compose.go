@@ -191,6 +191,7 @@ var portalExtOverrideKeys = map[string]bool{
 	"liferay.home":                             true,
 	"portal.instance.http.socket.address":      true,
 	"module.framework.properties.osgi.console": true,
+	"virtual.hosts.valid.hosts":                true,
 	"browser.launcher.url":                     true,
 	"include-and-override":                     true,
 	"users.reminder.queries.enabled":           true,
@@ -224,10 +225,16 @@ func slotOverridesStanza(bundleDir string, ports Ports) string {
 	if ports.IsStock() {
 		return ""
 	}
+	// The slot pool reaches this bundle at slotN.liferay.test, so whitelist
+	// that host alongside the portal defaults to silence the "Set the property
+	// virtual.hosts.valid.hosts" warning PortalImpl logs on every request.
+	// PortalImpl matches each entry with StringUtil.wildcardMatches, so the
+	// *.liferay.test glob covers every slot without per-slot logic.
 	return fmt.Sprintf(
 		"liferay.home=%s\n"+
 			"portal.instance.http.socket.address=localhost:%d\n"+
-			"module.framework.properties.osgi.console=localhost:%d\n",
+			"module.framework.properties.osgi.console=localhost:%d\n"+
+			"virtual.hosts.valid.hosts=localhost,127.0.0.1,[::1],[0:0:0:0:0:0:0:1],*.liferay.test\n",
 		bundleDir, ports.TomcatHTTP, ports.OSGiConsole)
 }
 
