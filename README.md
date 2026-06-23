@@ -282,6 +282,8 @@ The engine is persisted in `~/.liferay-cli/worktrees/<id>/docker/ports.json`. `d
 
 JDBC drivers for mysql, mariadb, postgres, and hsql already ship in `tomcat-*/webapps/ROOT/WEB-INF/shielded-container-lib/`, so no manual driver install is needed for the supported engines.
 
+Regardless of engine, the managed block also sets `object.encryption.enabled`, `object.encryption.algorithm=AES`, and a fixed `object.encryption.key`, so Object framework `Encrypted` fields work out of the box (the portal ships these blank, which otherwise fails field validation). The key is constant by design — it must stay stable for previously-encrypted data to remain decryptable.
+
 Requires Docker Desktop (macOS/Windows) or Docker Engine (Linux) for the non-hypersonic engines.
 
 ### Slots: running multiple Liferay instances side-by-side

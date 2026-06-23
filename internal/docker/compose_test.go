@@ -107,6 +107,9 @@ func TestWritePortalExtFreshFile(t *testing.T) {
 		"passwords.default.policy.change.required=false",
 		"jdbc.default.driverClassName=com.mysql.cj.jdbc.Driver",
 		"browser.launcher.url=",
+		"object.encryption.enabled=true",
+		"object.encryption.algorithm=AES",
+		"object.encryption.key=0H5WCxHcGAHsVv0OcGktBQ==",
 	} {
 		if !strings.Contains(string(got), want) {
 			t.Errorf("missing %q in:\n%s", want, got)

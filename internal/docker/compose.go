@@ -197,6 +197,9 @@ var portalExtOverrideKeys = map[string]bool{
 	"users.reminder.queries.enabled":           true,
 	"terms.of.use.required":                    true,
 	"passwords.default.policy.change.required": true,
+	"object.encryption.enabled":                true,
+	"object.encryption.algorithm":              true,
+	"object.encryption.key":                    true,
 }
 
 // devModeOverrides is emitted unconditionally: turns on developer mode by
@@ -211,6 +214,16 @@ const devModeOverrides = "include-and-override=portal-developer.properties\n" +
 // browserLauncherOverride suppresses Liferay's auto-open-browser-on-startup
 // behavior. Always emitted — agent-driven workflows should never pop a window.
 const browserLauncherOverride = "browser.launcher.url=\n"
+
+// objectEncryptionOverrides configures the Object framework's "Encrypted"
+// business type so encrypted fields work out of the box. The portal ships
+// object.encryption.algorithm and object.encryption.key blank, which makes any
+// encrypted field fail validation. A fixed algorithm and key are fine for local
+// dev — the key only needs to stay constant for a bundle's lifetime so that
+// previously-encrypted data stays decryptable. Always emitted.
+const objectEncryptionOverrides = "object.encryption.enabled=true\n" +
+	"object.encryption.algorithm=AES\n" +
+	"object.encryption.key=0H5WCxHcGAHsVv0OcGktBQ==\n"
 
 const (
 	managedBlockBegin = "# Begin liferay-cli portal-ext overrides"
@@ -603,6 +616,7 @@ func writePortalExt(bundleDir, engine string, ports Ports) error {
 	sb.WriteString(jdbcStanza)
 	sb.WriteString(slotStanza)
 	sb.WriteString(browserLauncherOverride)
+	sb.WriteString(objectEncryptionOverrides)
 	sb.WriteString(managedBlockEnd + ".\n")
 
 	return os.WriteFile(path, []byte(sb.String()), 0644)
