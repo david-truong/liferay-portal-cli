@@ -22,8 +22,9 @@ All invocations work from the portal root — no cd required.
 Examples:
   liferay build-service change-tracking-service
   liferay build-service change-tracking/change-tracking-service`,
-	Args: cobra.ExactArgs(1),
-	RunE: runBuildService,
+	Args:              cobra.ExactArgs(1),
+	RunE:              runBuildService,
+	ValidArgsFunction: completeModuleFirstArg,
 }
 
 func init() {

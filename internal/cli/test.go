@@ -24,8 +24,9 @@ All invocations work from the portal root — no cd required.
 Examples:
   liferay test change-tracking-web --tests "*FooTest"
   liferay test change-tracking-web --tests "com.liferay.foo.FooTest.testBar"`,
-	Args: cobra.ExactArgs(1),
-	RunE: runTest,
+	Args:              cobra.ExactArgs(1),
+	RunE:              runTest,
+	ValidArgsFunction: completeModuleFirstArg,
 }
 
 func init() {

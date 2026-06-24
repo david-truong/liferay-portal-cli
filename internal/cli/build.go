@@ -46,6 +46,13 @@ Examples:
 
 func init() {
 	buildCmd.Flags().BoolVar(&noFormat, "no-format", false, "Skip formatSource (omit -a from gw deploy)")
+
+	antProjects := make([]string, 0, len(antDeployProjects))
+	for name := range antDeployProjects {
+		antProjects = append(antProjects, name)
+	}
+	buildCmd.ValidArgsFunction = completeModuleArgs(antProjects...)
+
 	rootCmd.AddCommand(buildCmd)
 }
 

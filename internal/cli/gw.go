@@ -9,9 +9,9 @@ import (
 )
 
 var gwCmd = &cobra.Command{
-	Use:                "gradle-wrapper <module> [gradle-args...]",
-	Aliases:            []string{"gw"},
-	Short:              "Run a Gradle task in a Liferay module",
+	Use:     "gradle-wrapper <module> [gradle-args...]",
+	Aliases: []string{"gw"},
+	Short:   "Run a Gradle task in a Liferay module",
 	Long: `Resolves the module by name and runs gradlew with the given arguments.
 
 Examples:
@@ -20,6 +20,7 @@ Examples:
   liferay gw change-tracking/change-tracking-web deploy --info`,
 	DisableFlagParsing: true,
 	RunE:               runGw,
+	ValidArgsFunction:  completeModuleFirstArg,
 }
 
 func init() {

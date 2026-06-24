@@ -21,7 +21,8 @@ Examples:
   liferay sf
   liferay sf change-tracking-web
   liferay sf change-tracking-web blogs-web`,
-	RunE: runSf,
+	RunE:              runSf,
+	ValidArgsFunction: completeModuleArgs(),
 }
 
 func init() {

@@ -22,7 +22,8 @@ Examples:
   liferay clean
   liferay clean change-tracking-web
   liferay clean change-tracking-web blogs-web`,
-	RunE: runClean,
+	RunE:              runClean,
+	ValidArgsFunction: completeModuleArgs(),
 }
 
 func init() {

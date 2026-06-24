@@ -34,6 +34,22 @@ go install ./cmd/liferay
 
 This drops a `liferay` binary into `$(go env GOPATH)/bin`. Make sure that directory is on your `PATH` (or symlink the binary into one that is). All other forms (`go build`, `go build ./...`) only compile-check — only `go install ./cmd/liferay` updates the binary on `PATH`.
 
+### Shell completion
+
+`liferay` ships shell completion for the commands that take a module argument (`build`, `clean`, `sf`, `gw`, `build-service`, `build-rest`, `test`, `test-integration`). Pressing `<TAB>` after one of these completes module names resolved from the current worktree, so `liferay build chan<TAB>` expands to `change-tracking-web` and friends. `build` also completes the Ant root projects (`portal-impl`, `portal-kernel`, ...).
+
+Install it once for your shell:
+
+```sh
+# zsh — add to ~/.zshrc
+source <(liferay completion zsh)
+
+# bash — add to ~/.bashrc
+source <(liferay completion bash)
+```
+
+Run `liferay completion <shell> --help` for fish/PowerShell and persistent-install instructions.
+
 ## Commands
 
 | Command | Description |

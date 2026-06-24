@@ -111,6 +111,26 @@ func TestPlaywrightFiltered(t *testing.T) {
 	}
 }
 
+func TestNamesSortedAndDeduplicated(t *testing.T) {
+	root := buildFakePortal(t)
+	idx, err := BuildModuleIndex(root)
+	if err != nil {
+		t.Fatalf("BuildModuleIndex: %v", err)
+	}
+
+	names := idx.Names()
+
+	want := []string{"blogs-web", "change-tracking-web"}
+	if len(names) != len(want) {
+		t.Fatalf("got %v, want %v", names, want)
+	}
+	for i, name := range want {
+		if names[i] != name {
+			t.Errorf("got %v, want %v", names, want)
+		}
+	}
+}
+
 func TestMissingModuleSuggestion(t *testing.T) {
 	root := buildFakePortal(t)
 	idx, err := BuildModuleIndex(root)

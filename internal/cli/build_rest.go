@@ -14,8 +14,9 @@ All invocations work from the portal root — no cd required.
 Examples:
   liferay build-rest headless-delivery-impl
   liferay build-rest headless-delivery/headless-delivery-impl`,
-	Args: cobra.ExactArgs(1),
-	RunE: runBuildREST,
+	Args:              cobra.ExactArgs(1),
+	RunE:              runBuildREST,
+	ValidArgsFunction: completeModuleFirstArg,
 }
 
 func init() {

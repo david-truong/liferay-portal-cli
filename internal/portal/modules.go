@@ -115,6 +115,17 @@ func (idx *ModuleIndex) AllPaths() []string {
 	return out
 }
 
+// Names returns every resolvable module name (basename) in sorted order.
+// Useful for shell completion, where a name maps to one or more paths.
+func (idx *ModuleIndex) Names() []string {
+	out := make([]string, 0, len(idx.byName))
+	for name := range idx.byName {
+		out = append(out, name)
+	}
+	sort.Strings(out)
+	return out
+}
+
 // Resolve returns the absolute path for the named module.
 func (idx *ModuleIndex) Resolve(name string) (string, error) {
 	if strings.Contains(name, "/") {
