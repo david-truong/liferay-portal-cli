@@ -180,7 +180,12 @@ func jiraCmd(key string) tea.Cmd {
 }
 
 func actionCmd(selfExe string, index int, w Worktree, verb string) tea.Cmd {
-	commands := [][]string{{"server", verb}}
+	command := []string{"server", verb}
+	if verb == "start" || verb == "restart" {
+		command = append(command, "--debug")
+	}
+
+	commands := [][]string{command}
 	if verb == "stop" {
 		commands = append(commands, []string{"db", "stop"})
 	}
@@ -398,7 +403,7 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			[][]string{
 				{"server", "wipe", "--yes"},
 				{"db", "restart"},
-				{"server", "start"},
+				{"server", "start", "--debug"},
 			})
 
 	case "ctrl+d":
