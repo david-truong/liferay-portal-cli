@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"os/signal"
 	"path/filepath"
 	"runtime"
 	"strconv"
@@ -90,7 +91,39 @@ func Start(paths Paths, opts StartOptions) error {
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	cmd.Stdin = os.Stdin
-	return cmd.Run()
+
+	if !opts.Foreground {
+		return cmd.Run()
+	}
+	return runForeground(cmd, paths.PidFile)
+}
+
+// runForeground runs catalina.sh "run" and keeps the PID file in sync with the
+// foreground process. Unlike "start", catalina.sh's "run" action execs the JVM
+// in place without ever writing $CATALINA_PID, so "liferay server status" and
+// the dashboard would report the server as down while it is running. The script
+// execs the JVM, so the child we launch is the JVM itself; record its pid and
+// clear the file once it exits. Ctrl+C reaches the foreground JVM through the
+// terminal — capture it here so this process outlives the JVM long enough to
+// remove the PID file instead of being torn down first.
+func runForeground(cmd *exec.Cmd, pidFile string) error {
+	if err := cmd.Start(); err != nil {
+		return err
+	}
+
+	if err := os.WriteFile(
+		pidFile, []byte(strconv.Itoa(cmd.Process.Pid)), 0644); err != nil {
+
+		fmt.Fprintf(os.Stderr, "warning: could not write %s: %v\n", pidFile, err)
+	}
+
+	signals := make(chan os.Signal, 1)
+	signal.Notify(signals, os.Interrupt, syscall.SIGTERM)
+	defer signal.Stop(signals)
+
+	err := cmd.Wait()
+	_ = os.Remove(pidFile)
+	return err
 }
 
 // Stop runs catalina.sh stop, using the same CATALINA_PID file written by Start.
