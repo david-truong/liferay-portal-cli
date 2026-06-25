@@ -1,6 +1,7 @@
 package dashboard
 
 import (
+	"fmt"
 	"os"
 	"strings"
 	"testing"
@@ -8,6 +9,8 @@ import (
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+
+	"github.com/david-truong/liferay-portal-cli/internal/docker"
 )
 
 func testModel() model {
@@ -35,6 +38,29 @@ func TestInitialActiveTab(t *testing.T) {
 	cfg.Active = 5
 	if m := newModel(cfg); m.active != 0 {
 		t.Errorf("out-of-range active = %d, want 0", m.active)
+	}
+}
+
+func TestAdminerURL(t *testing.T) {
+	m := testModel()
+	w := m.cfg.Worktrees[1] // slot 1, mysql
+
+	want := fmt.Sprintf("http://localhost:%d/", docker.PortsFromSlot(1).Adminer)
+	if got := m.adminerURL(w); got != want {
+		t.Errorf("adminerURL = %q, want %q", got, want)
+	}
+}
+
+func TestCtrlOWithoutDockerEngineNotes(t *testing.T) {
+	m := testModel() // active tab 0 is the primary with no engine configured
+
+	next, cmd := m.handleKey(tea.KeyMsg{Type: tea.KeyCtrlO})
+	m = next.(model)
+	if cmd != nil {
+		t.Error("ctrl+o should not launch a command when no Docker engine is configured")
+	}
+	if !strings.Contains(m.note[0], "no Adminer") {
+		t.Errorf("note = %q, want a 'no Adminer' message", m.note[0])
 	}
 }
 

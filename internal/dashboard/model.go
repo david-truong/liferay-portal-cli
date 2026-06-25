@@ -379,6 +379,13 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "o":
 		return m, openCmd(m.portalURL(w))
 
+	case "ctrl+o":
+		if w.Engine == "" || !docker.IsDockerManagedEngine(w.Engine) {
+			m.note[m.active] = "no Adminer — the database is not a Docker engine"
+			return m, nil
+		}
+		return m, openCmd(m.adminerURL(w))
+
 	case "s", "x", "r":
 		if m.action[m.active] != "" {
 			return m, nil
@@ -715,6 +722,14 @@ func (m model) portalURL(w Worktree) string {
 	return fmt.Sprintf("http://%s:%d/", host, ports.TomcatHTTP)
 }
 
+// adminerURL is the Adminer web UI for the worktree's Docker database. Adminer
+// binds to a host port (per slot) and always answers on localhost regardless
+// of the slot hostname.
+func (m model) adminerURL(w Worktree) string {
+	ports := docker.PortsFromSlot(effectiveSlot(w))
+	return fmt.Sprintf("http://localhost:%d/", ports.Adminer)
+}
+
 // availLogHeight returns the rows left for the log body after the surrounding
 // chrome (tabs, panel, drawer title, footer) is laid out, so the full view
 // always fits the terminal without scrolling. It measures the real chrome
@@ -816,7 +831,7 @@ func (m model) viewFooter() string {
 			tabLabel(m.cfg.Worktrees[m.active]))), m.width)
 	}
 	return softWrap(dimStyle.Render(
-		"←/→ tabs · o open · s start · x stop · r restart · w reset · ctrl+d delete · : run · l logs · u refresh · q quit"),
+		"←/→ tabs · o open · ctrl+o adminer · s start · x stop · r restart · w reset · ctrl+d delete · : run · l logs · u refresh · q quit"),
 		m.width)
 }
 
