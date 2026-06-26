@@ -110,6 +110,9 @@ func TestWritePortalExtFreshFile(t *testing.T) {
 		"object.encryption.enabled=true",
 		"object.encryption.algorithm=AES",
 		"object.encryption.key=0H5WCxHcGAHsVv0OcGktBQ==",
+		`configuration.override.com.liferay.change.tracking.web.internal.configuration.CTConfiguration_showAllData=B"true"`,
+		`configuration.override.com.liferay.change.tracking.configuration.CTSettingsConfiguration_enabled=B"true"`,
+		`configuration.override.com.liferay.portal.search.elasticsearch7.configuration.ElasticsearchConfiguration_productionModeEnabled=B"false"`,
 	} {
 		if !strings.Contains(string(got), want) {
 			t.Errorf("missing %q in:\n%s", want, got)

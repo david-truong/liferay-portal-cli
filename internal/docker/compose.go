@@ -200,6 +200,9 @@ var portalExtOverrideKeys = map[string]bool{
 	"object.encryption.enabled":                true,
 	"object.encryption.algorithm":              true,
 	"object.encryption.key":                    true,
+	"configuration.override.com.liferay.change.tracking.web.internal.configuration.CTConfiguration_showAllData":                      true,
+	"configuration.override.com.liferay.change.tracking.configuration.CTSettingsConfiguration_enabled":                               true,
+	"configuration.override.com.liferay.portal.search.elasticsearch7.configuration.ElasticsearchConfiguration_productionModeEnabled": true,
 }
 
 // devModeOverrides is emitted unconditionally: turns on developer mode by
@@ -224,6 +227,16 @@ const browserLauncherOverride = "browser.launcher.url=\n"
 const objectEncryptionOverrides = "object.encryption.enabled=true\n" +
 	"object.encryption.algorithm=AES\n" +
 	"object.encryption.key=0H5WCxHcGAHsVv0OcGktBQ==\n"
+
+// configurationOverrides seeds OSGi component configuration through the
+// portal's configuration.override.* mechanism (the B"…" prefix types the value
+// as a Boolean). Always emitted for local dev: Change Tracking is enabled with
+// all data visible, and Elasticsearch production mode is off so the embedded
+// sidecar boots without a standalone cluster.
+const configurationOverrides = `configuration.override.com.liferay.change.tracking.web.internal.configuration.CTConfiguration_showAllData=B"true"
+configuration.override.com.liferay.change.tracking.configuration.CTSettingsConfiguration_enabled=B"true"
+configuration.override.com.liferay.portal.search.elasticsearch7.configuration.ElasticsearchConfiguration_productionModeEnabled=B"false"
+`
 
 const (
 	managedBlockBegin = "# Begin liferay-cli portal-ext overrides"
@@ -617,6 +630,7 @@ func writePortalExt(bundleDir, engine string, ports Ports) error {
 	sb.WriteString(slotStanza)
 	sb.WriteString(browserLauncherOverride)
 	sb.WriteString(objectEncryptionOverrides)
+	sb.WriteString(configurationOverrides)
 	sb.WriteString(managedBlockEnd + ".\n")
 
 	return os.WriteFile(path, []byte(sb.String()), 0644)
