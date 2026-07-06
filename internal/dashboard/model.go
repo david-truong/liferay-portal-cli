@@ -289,6 +289,12 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case actionDoneMsg:
+		// The tab this message was addressed to may have been removed (e.g.
+		// deleted, or dropped by mergeWorktrees) while the action was in
+		// flight, shifting or shrinking the per-tab slices.
+		if msg.index >= len(m.action) {
+			return m, probeCmd(m.cfg.Worktrees)
+		}
 		m.action[msg.index] = ""
 		if msg.err != nil {
 			m.note[msg.index] = msg.err.Error()
@@ -300,6 +306,11 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, probeCmd(m.cfg.Worktrees)
 
 	case cmdDoneMsg:
+		// Same race as actionDoneMsg above: the tab may be gone by the time
+		// the running command reports back.
+		if msg.index >= len(m.runs) {
+			return m, probeCmd(m.cfg.Worktrees)
+		}
 		run := m.runs[msg.index]
 		run.running = false
 		m.runs[msg.index] = run
