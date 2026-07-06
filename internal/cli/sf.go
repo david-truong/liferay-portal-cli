@@ -7,6 +7,7 @@ import (
 
 	"github.com/david-truong/liferay-portal-cli/internal/gradle"
 	"github.com/david-truong/liferay-portal-cli/internal/logrun"
+	"github.com/david-truong/liferay-portal-cli/internal/portal"
 	"github.com/spf13/cobra"
 )
 
@@ -36,6 +37,9 @@ func runSf(cmd *cobra.Command, args []string) error {
 	}
 
 	if len(args) == 0 {
+		if portal.DetectProjectType(portalRoot) == portal.Workspace {
+			return fmt.Errorf("sf requires a module name in a Workspace project — no diff-scoped formatter exists for Workspaces")
+		}
 		return runAnt(portalRoot, filepath.Join(portalRoot, "portal-impl"), "format-source-current-branch", "format-source")
 	}
 

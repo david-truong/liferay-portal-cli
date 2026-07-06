@@ -6,6 +6,7 @@ import (
 
 	"github.com/david-truong/liferay-portal-cli/internal/gradle"
 	"github.com/david-truong/liferay-portal-cli/internal/logrun"
+	"github.com/david-truong/liferay-portal-cli/internal/portal"
 	"github.com/spf13/cobra"
 )
 
@@ -37,6 +38,9 @@ func runClean(cmd *cobra.Command, args []string) error {
 	}
 
 	if len(args) == 0 {
+		if portal.DetectProjectType(portalRoot) == portal.Workspace {
+			return fmt.Errorf("clean requires a module name in a Workspace project")
+		}
 		return runAnt(portalRoot, portalRoot, "clean", "clean-all")
 	}
 
