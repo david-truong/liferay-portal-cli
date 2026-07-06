@@ -184,6 +184,36 @@ func TestBundleDir_ResolvesProjectDirInterpolation(t *testing.T) {
 	}
 }
 
+func TestBundleDir_WorkspaceDefault(t *testing.T) {
+	root := fakeWorkspaceRoot(t, "settings.gradle")
+
+	got, err := BundleDir(root)
+	if err != nil {
+		t.Fatalf("BundleDir: %v", err)
+	}
+	want := filepath.Join(root, "bundles")
+	if got != want {
+		t.Errorf("BundleDir = %q, want %q", got, want)
+	}
+}
+
+func TestBundleDir_WorkspaceHomeDirOverride(t *testing.T) {
+	root := fakeWorkspaceRoot(t, "settings.gradle")
+	props := "liferay.workspace.home.dir=my-bundles\n"
+	if err := os.WriteFile(filepath.Join(root, "gradle.properties"), []byte(props), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := BundleDir(root)
+	if err != nil {
+		t.Fatalf("BundleDir: %v", err)
+	}
+	want := filepath.Join(root, "my-bundles")
+	if got != want {
+		t.Errorf("BundleDir = %q, want %q", got, want)
+	}
+}
+
 func TestFindTomcatDir_VersionOnly(t *testing.T) {
 	parent := t.TempDir()
 	root := filepath.Join(parent, "portal")

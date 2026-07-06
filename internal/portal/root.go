@@ -73,9 +73,15 @@ func IsPortalRepo(dir string) bool {
 	return isPortalRoot(dir)
 }
 
-// BundleDir returns the resolved bundle directory for the given portal root,
-// honouring app.server.properties and app.server.<user>.properties overrides.
+// BundleDir returns the resolved bundle directory for the given root,
+// honouring app.server.properties / app.server.<user>.properties overrides
+// for a Monorepo root, or liferay.workspace.home.dir (default "bundles") in
+// gradle.properties for a Workspace root.
 func BundleDir(portalRoot string) (string, error) {
+	if DetectProjectType(portalRoot) == Workspace {
+		return workspaceBundleDir(portalRoot)
+	}
+
 	props := readAppServerProps(portalRoot)
 
 	dir := props["app.server.parent.dir"]
@@ -85,6 +91,15 @@ func BundleDir(portalRoot string) (string, error) {
 		dir = resolveProperty(dir, portalRoot, props)
 	}
 	return filepath.Clean(dir), nil
+}
+
+func workspaceBundleDir(portalRoot string) (string, error) {
+	props, _ := ReadProperties(filepath.Join(portalRoot, "gradle.properties"))
+	dir := props["liferay.workspace.home.dir"]
+	if dir == "" {
+		dir = "bundles"
+	}
+	return filepath.Clean(filepath.Join(portalRoot, dir)), nil
 }
 
 // FindTomcatDir resolves the Tomcat directory from app.server.properties
