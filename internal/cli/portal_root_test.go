@@ -101,7 +101,13 @@ func TestCheckStockPorts_WorkspaceBypassesRefusal(t *testing.T) {
 }
 
 func TestCheckStockPorts_RefusesWhenPortsOccupiedForNonWorktree(t *testing.T) {
-	root := t.TempDir() // no .git, no workspace marker => not linked, not Workspace
+	root := t.TempDir() // a primary monorepo checkout: not linked, not Workspace
+	if err := os.WriteFile(filepath.Join(root, "build.xml"), nil, 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Mkdir(filepath.Join(root, "modules"), 0755); err != nil {
+		t.Fatal(err)
+	}
 
 	ports := docker.PortsFromSlot(0)
 	ln, err := net.Listen("tcp", fmt.Sprintf("127.0.0.1:%d", ports.Arquillian))
