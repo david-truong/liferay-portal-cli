@@ -2,6 +2,7 @@ package cli
 
 import (
 	"fmt"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
@@ -9,6 +10,7 @@ import (
 
 	"github.com/david-truong/liferay-portal-cli/internal/gradle"
 	"github.com/david-truong/liferay-portal-cli/internal/logrun"
+	"github.com/david-truong/liferay-portal-cli/internal/portal"
 	"github.com/spf13/cobra"
 )
 
@@ -63,6 +65,9 @@ func runBuild(cmd *cobra.Command, args []string) error {
 	}
 
 	if len(args) == 0 {
+		if portal.DetectProjectType(portalRoot) == portal.Workspace {
+			return runWorkspaceBuildAll(portalRoot)
+		}
 		return runAntAll(portalRoot)
 	}
 
@@ -91,6 +96,39 @@ func runBuild(cmd *cobra.Command, args []string) error {
 		}
 	}
 	return nil
+}
+
+// runWorkspaceBuildAll mirrors "ant all" for a Liferay Workspace: assemble
+// the bundle if it doesn't exist yet, then deploy every discovered module.
+func runWorkspaceBuildAll(portalRoot string) error {
+	bundleDir, err := portal.BundleDir(portalRoot)
+	if err != nil {
+		return err
+	}
+	if info, statErr := os.Stat(bundleDir); statErr != nil || !info.IsDir() {
+		if err := runGwInitBundle(portalRoot); err != nil {
+			return err
+		}
+	}
+
+	idx, err := buildModuleIndex(portalRoot)
+	if err != nil {
+		return err
+	}
+	for _, modulePath := range idx.AllPaths() {
+		if err := runGwDeploy(portalRoot, modulePath); err != nil {
+			return fmt.Errorf("deploying %s: %w", filepath.Base(modulePath), err)
+		}
+	}
+	return nil
+}
+
+func runGwInitBundle(portalRoot string) error {
+	cmd, err := gradle.Command(portalRoot, "initBundle")
+	if err != nil {
+		return err
+	}
+	return logrun.Run(cmd, logrun.Options{Label: "init-bundle", Verbose: verbose, WorktreeRoot: portalRoot})
 }
 
 func runAnt(portalRoot, dir, target, label string) error {
