@@ -3,6 +3,8 @@ package cli
 import (
 	"fmt"
 	"os"
+
+	"github.com/david-truong/liferay-portal-cli/internal/portal"
 )
 
 // autofixWorktree propagates the same set of files that "liferay worktree add"
@@ -23,7 +25,8 @@ func autofixWorktree(portalRoot string) {
 		return
 	}
 
-	for _, r := range ensureWorktreeFiles(primaryRoot, portalRoot) {
+	projectType := portal.DetectProjectType(primaryRoot)
+	for _, r := range ensureWorktreeFiles(primaryRoot, portalRoot, projectType) {
 		switch r.action {
 		case "linked", "copied", "generated":
 			fmt.Fprintf(os.Stderr, "[liferay] auto-fixed worktree: %s %s\n", r.action, r.name)
