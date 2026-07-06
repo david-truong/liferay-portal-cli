@@ -43,7 +43,10 @@ type ModuleIndex struct {
 	qualifier string
 }
 
-// BuildModuleIndex walks all module roots under portalRoot and returns an index.
+// BuildModuleIndex walks all module roots under portalRoot and returns an
+// index. For a Monorepo root this is the fixed moduleRoots list; for a
+// Workspace root it's the single configured modules directory
+// (liferay.workspace.modules.dir in gradle.properties, default "modules").
 func BuildModuleIndex(portalRoot string) (*ModuleIndex, error) {
 	idx := &ModuleIndex{
 		byName:    make(map[string][]string),
@@ -51,7 +54,13 @@ func BuildModuleIndex(portalRoot string) (*ModuleIndex, error) {
 		noun:      "module",
 		qualifier: "group/name",
 	}
-	for _, rel := range moduleRoots {
+
+	roots := moduleRoots
+	if DetectProjectType(portalRoot) == Workspace {
+		roots = []string{workspaceModulesDir(portalRoot)}
+	}
+
+	for _, rel := range roots {
 		root := filepath.Join(portalRoot, filepath.FromSlash(rel))
 		if _, err := os.Stat(root); os.IsNotExist(err) {
 			continue
@@ -61,6 +70,17 @@ func BuildModuleIndex(portalRoot string) (*ModuleIndex, error) {
 		}
 	}
 	return idx, nil
+}
+
+// workspaceModulesDir reads liferay.workspace.modules.dir from portalRoot's
+// gradle.properties, defaulting to "modules" when unset.
+func workspaceModulesDir(portalRoot string) string {
+	props, _ := ReadProperties(filepath.Join(portalRoot, "gradle.properties"))
+	dir := props["liferay.workspace.modules.dir"]
+	if dir == "" {
+		dir = "modules"
+	}
+	return dir
 }
 
 func walkModules(dir string, idx *ModuleIndex) error {
