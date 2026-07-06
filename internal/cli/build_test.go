@@ -13,10 +13,18 @@ func TestRunWorkspaceBuildAll_InitsBundleWhenMissing(t *testing.T) {
 		t.Fatal(err)
 	}
 	// A fake gradlew that just records its own invocation and does nothing —
-	// good enough to prove initBundle and deploy both get invoked.
-	gradlew := filepath.Join(root, "gradlew")
-	script := "#!/bin/sh\necho \"$@\" >> " + filepath.Join(root, "gw.log") + "\n"
-	if err := os.WriteFile(gradlew, []byte(script), 0755); err != nil {
+	// good enough to prove initBundle and deploy both get invoked. gradle.Find
+	// looks for gradlew.bat on Windows and gradlew everywhere else, so both
+	// must exist for this test to pass on every CI platform.
+	logPath := filepath.Join(root, "gw.log")
+	gradlewSh := filepath.Join(root, "gradlew")
+	scriptSh := "#!/bin/sh\necho \"$@\" >> " + logPath + "\n"
+	if err := os.WriteFile(gradlewSh, []byte(scriptSh), 0755); err != nil {
+		t.Fatal(err)
+	}
+	gradlewBat := filepath.Join(root, "gradlew.bat")
+	scriptBat := "@echo off\r\necho %* >> \"" + logPath + "\"\r\n"
+	if err := os.WriteFile(gradlewBat, []byte(scriptBat), 0755); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.MkdirAll(filepath.Join(root, "modules", "my-module"), 0755); err != nil {
@@ -30,7 +38,7 @@ func TestRunWorkspaceBuildAll_InitsBundleWhenMissing(t *testing.T) {
 		t.Fatalf("runWorkspaceBuildAll: %v", err)
 	}
 
-	log, err := os.ReadFile(filepath.Join(root, "gw.log"))
+	log, err := os.ReadFile(logPath)
 	if err != nil {
 		t.Fatalf("reading gw.log: %v", err)
 	}
