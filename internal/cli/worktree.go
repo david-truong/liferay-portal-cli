@@ -240,11 +240,6 @@ type fixAction struct {
 // upstream git ignores. Idempotent — files that already exist get an action
 // of "skipped".
 func ensureWorktreeFiles(primaryRoot, worktreeRoot string, projectType portal.ProjectType) []fixAction {
-	username, err := portal.SafeUsername()
-	if err != nil {
-		return []fixAction{{name: "current-user", action: "failed", note: err.Error()}}
-	}
-
 	var results []fixAction
 
 	// Symlink candidates (CLAUDE.md, .claude/, .idea/, etc.)
@@ -287,6 +282,11 @@ func ensureWorktreeFiles(primaryRoot, worktreeRoot string, projectType portal.Pr
 
 	if projectType != portal.Monorepo {
 		return results
+	}
+
+	username, err := portal.SafeUsername()
+	if err != nil {
+		return []fixAction{{name: "current-user", action: "failed", note: err.Error()}}
 	}
 
 	// app.server.<user>.properties
