@@ -308,3 +308,19 @@ func TestFindTomcatDir_WorkspaceNoBundleYet(t *testing.T) {
 		t.Error("expected an error when no tomcat-* directory exists yet")
 	}
 }
+
+func TestFindTomcatDir_WorkspacePlainTomcatDir(t *testing.T) {
+	root := fakeWorkspaceRoot(t, "settings.gradle")
+	tomcatDir := filepath.Join(root, "bundles", "tomcat")
+	if err := os.MkdirAll(tomcatDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := FindTomcatDir(root)
+	if err != nil {
+		t.Fatalf("FindTomcatDir: %v", err)
+	}
+	if got != tomcatDir {
+		t.Errorf("FindTomcatDir = %q, want %q", got, tomcatDir)
+	}
+}

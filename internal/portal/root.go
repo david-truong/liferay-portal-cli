@@ -139,10 +139,18 @@ func workspaceTomcatDir(portalRoot string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	if len(matches) == 0 {
-		return "", fmt.Errorf("no tomcat-* directory found under %s — run \"liferay build\" to assemble the bundle first", bundleDir)
+	if len(matches) > 0 {
+		return highestVersionDir(matches), nil
 	}
-	return highestVersionDir(matches), nil
+
+	// Some workspace plugin versions name the directory just "tomcat",
+	// with no version suffix.
+	plainDir := filepath.Join(bundleDir, "tomcat")
+	if dirExists(plainDir) {
+		return plainDir, nil
+	}
+
+	return "", fmt.Errorf("no tomcat-* or tomcat directory found under %s — run \"liferay build\" to assemble the bundle first", bundleDir)
 }
 
 // highestVersionDir returns the entry from a set of ".../tomcat-X.Y.Z" paths
