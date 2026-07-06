@@ -9,9 +9,10 @@ import (
 
 // autofixWorktree propagates the same set of files that "liferay worktree add"
 // would have created — symlinks (CLAUDE.md, .claude/, etc.), per-user copies
-// (build.*.properties, .env), and generated configs (app.server.<user>.properties,
-// bundles/portal-setup-wizard.properties) — for linked worktrees that were
-// created with plain "git worktree add" or had files removed since.
+// (build.*.properties, .env), and, for Monorepo projects only, generated
+// configs (app.server.<user>.properties, bundles/portal-setup-wizard.properties)
+// — for linked worktrees that were created with plain "git worktree add" or
+// had files removed since.
 //
 // Idempotent and quiet: emits a single "[liferay] auto-fixed worktree: ..."
 // line per file actually written, and nothing when everything's in place.

@@ -33,6 +33,9 @@ var buildCmd = &cobra.Command{
 	Aliases: []string{"b"},
 	Short:   "Build and deploy Liferay modules",
 	Long: `With no arguments: runs "ant all" from the portal root (full rebuild).
+On a Liferay Workspace, no arguments deploys every discovered OSGi module
+instead; client extensions are not included and must be deployed individually
+via "liferay client-extension <name>".
 With module names: resolves each to its directory and runs "gw deploy -a".
 
 The root-level Ant projects (portal-impl, portal-kernel, util-bridges,
@@ -100,6 +103,8 @@ func runBuild(cmd *cobra.Command, args []string) error {
 
 // runWorkspaceBuildAll mirrors "ant all" for a Liferay Workspace: assemble
 // the bundle if it doesn't exist yet, then deploy every discovered module.
+// This covers OSGi modules only — client extensions live under a separate
+// directory and are deployed individually via "liferay client-extension".
 func runWorkspaceBuildAll(portalRoot string) error {
 	bundleDir, err := portal.BundleDir(portalRoot)
 	if err != nil {
