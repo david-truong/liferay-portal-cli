@@ -102,3 +102,31 @@ func TestClientExtensionNoWorkspacesDir(t *testing.T) {
 		t.Error("expected error resolving against empty index, got nil")
 	}
 }
+
+func TestClientExtensionStandaloneWorkspaceConvention(t *testing.T) {
+	root := t.TempDir()
+	touch := func(parts ...string) {
+		t.Helper()
+		p := filepath.Join(append([]string{root}, parts...)...)
+		if err := os.MkdirAll(filepath.Dir(p), 0755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(p, nil, 0644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	touch("client-extensions", "liferay-seostudio-crawler", "client-extension.yaml")
+
+	idx, err := BuildClientExtensionIndex(root)
+	if err != nil {
+		t.Fatalf("BuildClientExtensionIndex: %v", err)
+	}
+	got, err := idx.Resolve("liferay-seostudio-crawler")
+	if err != nil {
+		t.Fatalf("Resolve: %v", err)
+	}
+	want := filepath.Join(root, "client-extensions", "liferay-seostudio-crawler")
+	if got != want {
+		t.Errorf("got %q, want %q", got, want)
+	}
+}

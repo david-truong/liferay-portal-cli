@@ -76,6 +76,61 @@ func TestFindRoot_NotInsideRepo(t *testing.T) {
 	}
 }
 
+// fakeWorkspaceRoot stages a Liferay Workspace marker: a Gradle file (named
+// by marker) that applies the com.liferay.workspace plugin. Returns the
+// workspace root path.
+func fakeWorkspaceRoot(t *testing.T, marker string) string {
+	t.Helper()
+	root := t.TempDir()
+	content := []byte(`apply plugin: "com.liferay.workspace"` + "\n")
+	if err := os.WriteFile(filepath.Join(root, marker), content, 0644); err != nil {
+		t.Fatal(err)
+	}
+	return root
+}
+
+func TestDetectProjectType_Monorepo(t *testing.T) {
+	root := fakePortalRoot(t)
+	if got := DetectProjectType(root); got != Monorepo {
+		t.Errorf("DetectProjectType = %v, want Monorepo", got)
+	}
+}
+
+func TestDetectProjectType_WorkspaceViaSettingsGradle(t *testing.T) {
+	root := fakeWorkspaceRoot(t, "settings.gradle")
+	if got := DetectProjectType(root); got != Workspace {
+		t.Errorf("DetectProjectType = %v, want Workspace", got)
+	}
+}
+
+func TestDetectProjectType_WorkspaceViaBuildGradle(t *testing.T) {
+	root := fakeWorkspaceRoot(t, "build.gradle")
+	if got := DetectProjectType(root); got != Workspace {
+		t.Errorf("DetectProjectType = %v, want Workspace", got)
+	}
+}
+
+func TestDetectProjectType_Unknown(t *testing.T) {
+	if got := DetectProjectType(t.TempDir()); got != ProjectTypeUnknown {
+		t.Errorf("DetectProjectType = %v, want ProjectTypeUnknown", got)
+	}
+}
+
+func TestFindRoot_FindsWorkspaceRoot(t *testing.T) {
+	root := fakeWorkspaceRoot(t, "settings.gradle")
+	nested := filepath.Join(root, "modules", "my-module")
+	if err := os.MkdirAll(nested, 0755); err != nil {
+		t.Fatal(err)
+	}
+	got, err := FindRoot(nested)
+	if err != nil {
+		t.Fatalf("FindRoot: %v", err)
+	}
+	if got != root {
+		t.Errorf("FindRoot(%q) = %q, want %q", nested, got, root)
+	}
+}
+
 func TestBundleDir_DefaultsToSiblingBundles(t *testing.T) {
 	parent := t.TempDir()
 	root := filepath.Join(parent, "portal")
@@ -129,6 +184,36 @@ func TestBundleDir_ResolvesProjectDirInterpolation(t *testing.T) {
 	}
 }
 
+func TestBundleDir_WorkspaceDefault(t *testing.T) {
+	root := fakeWorkspaceRoot(t, "settings.gradle")
+
+	got, err := BundleDir(root)
+	if err != nil {
+		t.Fatalf("BundleDir: %v", err)
+	}
+	want := filepath.Join(root, "bundles")
+	if got != want {
+		t.Errorf("BundleDir = %q, want %q", got, want)
+	}
+}
+
+func TestBundleDir_WorkspaceHomeDirOverride(t *testing.T) {
+	root := fakeWorkspaceRoot(t, "settings.gradle")
+	props := "liferay.workspace.home.dir=my-bundles\n"
+	if err := os.WriteFile(filepath.Join(root, "gradle.properties"), []byte(props), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := BundleDir(root)
+	if err != nil {
+		t.Fatalf("BundleDir: %v", err)
+	}
+	want := filepath.Join(root, "my-bundles")
+	if got != want {
+		t.Errorf("BundleDir = %q, want %q", got, want)
+	}
+}
+
 func TestFindTomcatDir_VersionOnly(t *testing.T) {
 	parent := t.TempDir()
 	root := filepath.Join(parent, "portal")
@@ -177,5 +262,65 @@ func TestFindTomcatDir_MissingVersionAndDir(t *testing.T) {
 	}
 	if err != nil && !strings.Contains(err.Error(), "tomcat.version") {
 		t.Errorf("error should mention 'tomcat.version', got: %v", err)
+	}
+}
+
+func TestFindTomcatDir_WorkspaceSingleMatch(t *testing.T) {
+	root := fakeWorkspaceRoot(t, "settings.gradle")
+	tomcatDir := filepath.Join(root, "bundles", "tomcat-9.0.87")
+	if err := os.MkdirAll(tomcatDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := FindTomcatDir(root)
+	if err != nil {
+		t.Fatalf("FindTomcatDir: %v", err)
+	}
+	if got != tomcatDir {
+		t.Errorf("FindTomcatDir = %q, want %q", got, tomcatDir)
+	}
+}
+
+func TestFindTomcatDir_WorkspacePicksHighestVersion(t *testing.T) {
+	root := fakeWorkspaceRoot(t, "settings.gradle")
+	older := filepath.Join(root, "bundles", "tomcat-9.0.99")
+	newer := filepath.Join(root, "bundles", "tomcat-10.1.15")
+	for _, d := range []string{older, newer} {
+		if err := os.MkdirAll(d, 0755); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	got, err := FindTomcatDir(root)
+	if err != nil {
+		t.Fatalf("FindTomcatDir: %v", err)
+	}
+	if got != newer {
+		t.Errorf("FindTomcatDir = %q, want %q (highest version)", got, newer)
+	}
+}
+
+func TestFindTomcatDir_WorkspaceNoBundleYet(t *testing.T) {
+	root := fakeWorkspaceRoot(t, "settings.gradle")
+
+	_, err := FindTomcatDir(root)
+	if err == nil {
+		t.Error("expected an error when no tomcat-* directory exists yet")
+	}
+}
+
+func TestFindTomcatDir_WorkspacePlainTomcatDir(t *testing.T) {
+	root := fakeWorkspaceRoot(t, "settings.gradle")
+	tomcatDir := filepath.Join(root, "bundles", "tomcat")
+	if err := os.MkdirAll(tomcatDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := FindTomcatDir(root)
+	if err != nil {
+		t.Fatalf("FindTomcatDir: %v", err)
+	}
+	if got != tomcatDir {
+		t.Errorf("FindTomcatDir = %q, want %q", got, tomcatDir)
 	}
 }

@@ -203,20 +203,25 @@ func runWorktreeAdd(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	// Only do portal-specific steps if this is a liferay-portal repo
-	if !portal.IsPortalRepo(primaryRoot) {
-		fmt.Printf("Worktree created at %s (non-portal repo: skipping file propagation)\n", absTarget)
+	projectType := portal.DetectProjectType(primaryRoot)
+	if projectType == portal.ProjectTypeUnknown {
+		fmt.Printf("Worktree created at %s (not a Liferay project: skipping file propagation)\n", absTarget)
 		return nil
 	}
 
-	if err := propagatePortalFiles(primaryRoot, absTarget); err != nil {
+	if err := propagatePortalFiles(primaryRoot, absTarget, projectType); err != nil {
 		return err
 	}
 
 	if worktreeSkipBuild {
-		fmt.Printf("\nNext: cd %s && ant all   (populates the bundle)\n", absTarget)
+		fmt.Printf("\nNext: cd %s && liferay build   (populates the bundle)\n", absTarget)
 		fmt.Println("Then: liferay server up   (starts Tomcat + MySQL)")
 		return nil
+	}
+
+	if projectType == portal.Workspace {
+		fmt.Println("\nRunning liferay build (initBundle + deploy) ...")
+		return runWorkspaceBuildAll(absTarget)
 	}
 	fmt.Println("\nRunning liferay build (ant all) ...")
 	return runAntAll(absTarget)
@@ -234,12 +239,7 @@ type fixAction struct {
 // from primaryRoot into worktreeRoot and generates per-worktree config that
 // upstream git ignores. Idempotent — files that already exist get an action
 // of "skipped".
-func ensureWorktreeFiles(primaryRoot, worktreeRoot string) []fixAction {
-	username, err := portal.SafeUsername()
-	if err != nil {
-		return []fixAction{{name: "current-user", action: "failed", note: err.Error()}}
-	}
-
+func ensureWorktreeFiles(primaryRoot, worktreeRoot string, projectType portal.ProjectType) []fixAction {
 	var results []fixAction
 
 	// Symlink candidates (CLAUDE.md, .claude/, .idea/, etc.)
@@ -278,6 +278,15 @@ func ensureWorktreeFiles(primaryRoot, worktreeRoot string) []fixAction {
 	// .env
 	if envSrc := filepath.Join(primaryRoot, ".env"); fsutil.Exists(envSrc) {
 		results = append(results, copyIfMissing(".env", envSrc, filepath.Join(worktreeRoot, ".env")))
+	}
+
+	if projectType != portal.Monorepo {
+		return results
+	}
+
+	username, err := portal.SafeUsername()
+	if err != nil {
+		return []fixAction{{name: "current-user", action: "failed", note: err.Error()}}
 	}
 
 	// app.server.<user>.properties
@@ -330,8 +339,8 @@ func copyIfMissing(name, src, dst string) fixAction {
 	return fixAction{name, "copied", ""}
 }
 
-func propagatePortalFiles(primaryRoot, worktreeRoot string) error {
-	results := ensureWorktreeFiles(primaryRoot, worktreeRoot)
+func propagatePortalFiles(primaryRoot, worktreeRoot string, projectType portal.ProjectType) error {
+	results := ensureWorktreeFiles(primaryRoot, worktreeRoot, projectType)
 
 	for _, r := range results {
 		if r.action == "failed" {

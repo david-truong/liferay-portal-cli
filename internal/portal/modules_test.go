@@ -166,6 +166,71 @@ func TestGroupSuffixDisambiguate(t *testing.T) {
 	}
 }
 
+func buildFakeWorkspace(t *testing.T) string {
+	t.Helper()
+	root := t.TempDir()
+
+	touch := func(parts ...string) {
+		t.Helper()
+		p := filepath.Join(append([]string{root}, parts...)...)
+		if err := os.MkdirAll(filepath.Dir(p), 0755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(p, nil, 0644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	content := []byte(`apply plugin: "com.liferay.workspace"` + "\n")
+	if err := os.WriteFile(filepath.Join(root, "settings.gradle"), content, 0644); err != nil {
+		t.Fatal(err)
+	}
+	touch("modules", "site-initializer-seo-issues", "bnd.bnd")
+
+	return root
+}
+
+func TestBuildModuleIndex_WorkspaceFlatModulesDir(t *testing.T) {
+	root := buildFakeWorkspace(t)
+
+	idx, err := BuildModuleIndex(root)
+	if err != nil {
+		t.Fatalf("BuildModuleIndex: %v", err)
+	}
+	got, err := idx.Resolve("site-initializer-seo-issues")
+	if err != nil {
+		t.Fatalf("Resolve: %v", err)
+	}
+	want := filepath.Join(root, "modules", "site-initializer-seo-issues")
+	if got != want {
+		t.Errorf("got %q, want %q", got, want)
+	}
+}
+
+func TestBuildModuleIndex_WorkspaceRespectsModulesDirOverride(t *testing.T) {
+	root := buildFakeWorkspace(t)
+	if err := os.WriteFile(filepath.Join(root, "gradle.properties"), []byte("liferay.workspace.modules.dir=custom-modules\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	// Move the module fixture to the overridden directory.
+	if err := os.Rename(filepath.Join(root, "modules"), filepath.Join(root, "custom-modules")); err != nil {
+		t.Fatal(err)
+	}
+
+	idx, err := BuildModuleIndex(root)
+	if err != nil {
+		t.Fatalf("BuildModuleIndex: %v", err)
+	}
+	got, err := idx.Resolve("site-initializer-seo-issues")
+	if err != nil {
+		t.Fatalf("Resolve: %v", err)
+	}
+	want := filepath.Join(root, "custom-modules", "site-initializer-seo-issues")
+	if got != want {
+		t.Errorf("got %q, want %q", got, want)
+	}
+}
+
 func contains(s, sub string) bool {
 	return len(s) >= len(sub) && (s == sub || len(s) > 0 && containsHelper(s, sub))
 }
