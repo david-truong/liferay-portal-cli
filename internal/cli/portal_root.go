@@ -31,9 +31,10 @@ func isLinkedWorktree(portalRoot string) bool {
 }
 
 // checkStockPorts returns an error if the caller is in the main repo (not a
-// linked worktree) and stock ports (slot 0) are already occupied.
+// linked worktree, and not a Liferay Workspace) and stock ports (slot 0) are
+// already occupied.
 func checkStockPorts(worktreeRoot string) error {
-	if isLinkedWorktree(worktreeRoot) {
+	if isLinkedWorktree(worktreeRoot) || portal.DetectProjectType(worktreeRoot) == portal.Workspace {
 		return nil
 	}
 	ports := docker.PortsFromSlot(0)
@@ -41,4 +42,14 @@ func checkStockPorts(worktreeRoot string) error {
 		return fmt.Errorf("stock ports are already in use — run from a worktree to use alternate ports")
 	}
 	return nil
+}
+
+// isPrimarySlot reports whether worktreeRoot should reserve/use slot 0 (the
+// stock-port "primary" checkout) rather than always claiming its own
+// non-zero slot. A Liferay Workspace project's bundle lives inside the
+// project itself, so it never shares a "primary" instance with anything
+// else — it always claims its own slot, just like a linked git worktree
+// does, even though it is its own repo's primary (only) checkout.
+func isPrimarySlot(worktreeRoot string) bool {
+	return isPrimaryWorktree(worktreeRoot) && portal.DetectProjectType(worktreeRoot) != portal.Workspace
 }
