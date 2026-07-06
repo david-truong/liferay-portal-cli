@@ -76,6 +76,61 @@ func TestFindRoot_NotInsideRepo(t *testing.T) {
 	}
 }
 
+// fakeWorkspaceRoot stages a Liferay Workspace marker: a Gradle file (named
+// by marker) that applies the com.liferay.workspace plugin. Returns the
+// workspace root path.
+func fakeWorkspaceRoot(t *testing.T, marker string) string {
+	t.Helper()
+	root := t.TempDir()
+	content := []byte(`apply plugin: "com.liferay.workspace"` + "\n")
+	if err := os.WriteFile(filepath.Join(root, marker), content, 0644); err != nil {
+		t.Fatal(err)
+	}
+	return root
+}
+
+func TestDetectProjectType_Monorepo(t *testing.T) {
+	root := fakePortalRoot(t)
+	if got := DetectProjectType(root); got != Monorepo {
+		t.Errorf("DetectProjectType = %v, want Monorepo", got)
+	}
+}
+
+func TestDetectProjectType_WorkspaceViaSettingsGradle(t *testing.T) {
+	root := fakeWorkspaceRoot(t, "settings.gradle")
+	if got := DetectProjectType(root); got != Workspace {
+		t.Errorf("DetectProjectType = %v, want Workspace", got)
+	}
+}
+
+func TestDetectProjectType_WorkspaceViaBuildGradle(t *testing.T) {
+	root := fakeWorkspaceRoot(t, "build.gradle")
+	if got := DetectProjectType(root); got != Workspace {
+		t.Errorf("DetectProjectType = %v, want Workspace", got)
+	}
+}
+
+func TestDetectProjectType_Unknown(t *testing.T) {
+	if got := DetectProjectType(t.TempDir()); got != ProjectTypeUnknown {
+		t.Errorf("DetectProjectType = %v, want ProjectTypeUnknown", got)
+	}
+}
+
+func TestFindRoot_FindsWorkspaceRoot(t *testing.T) {
+	root := fakeWorkspaceRoot(t, "settings.gradle")
+	nested := filepath.Join(root, "modules", "my-module")
+	if err := os.MkdirAll(nested, 0755); err != nil {
+		t.Fatal(err)
+	}
+	got, err := FindRoot(nested)
+	if err != nil {
+		t.Fatalf("FindRoot: %v", err)
+	}
+	if got != root {
+		t.Errorf("FindRoot(%q) = %q, want %q", nested, got, root)
+	}
+}
+
 func TestBundleDir_DefaultsToSiblingBundles(t *testing.T) {
 	parent := t.TempDir()
 	root := filepath.Join(parent, "portal")
