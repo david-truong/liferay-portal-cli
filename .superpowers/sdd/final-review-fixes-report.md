@@ -72,4 +72,4 @@ After:
 
 ## Commit
 
-`<filled in after commit>` — "Document Workspace build's module-only scope and fix stale autofix comment"
+`d756256` — "Document Workspace build's module-only scope and fix stale autofix comment"
