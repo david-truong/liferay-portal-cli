@@ -264,3 +264,47 @@ func TestFindTomcatDir_MissingVersionAndDir(t *testing.T) {
 		t.Errorf("error should mention 'tomcat.version', got: %v", err)
 	}
 }
+
+func TestFindTomcatDir_WorkspaceSingleMatch(t *testing.T) {
+	root := fakeWorkspaceRoot(t, "settings.gradle")
+	tomcatDir := filepath.Join(root, "bundles", "tomcat-9.0.87")
+	if err := os.MkdirAll(tomcatDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := FindTomcatDir(root)
+	if err != nil {
+		t.Fatalf("FindTomcatDir: %v", err)
+	}
+	if got != tomcatDir {
+		t.Errorf("FindTomcatDir = %q, want %q", got, tomcatDir)
+	}
+}
+
+func TestFindTomcatDir_WorkspacePicksHighestVersion(t *testing.T) {
+	root := fakeWorkspaceRoot(t, "settings.gradle")
+	older := filepath.Join(root, "bundles", "tomcat-9.0.99")
+	newer := filepath.Join(root, "bundles", "tomcat-10.1.15")
+	for _, d := range []string{older, newer} {
+		if err := os.MkdirAll(d, 0755); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	got, err := FindTomcatDir(root)
+	if err != nil {
+		t.Fatalf("FindTomcatDir: %v", err)
+	}
+	if got != newer {
+		t.Errorf("FindTomcatDir = %q, want %q (highest version)", got, newer)
+	}
+}
+
+func TestFindTomcatDir_WorkspaceNoBundleYet(t *testing.T) {
+	root := fakeWorkspaceRoot(t, "settings.gradle")
+
+	_, err := FindTomcatDir(root)
+	if err == nil {
+		t.Error("expected an error when no tomcat-* directory exists yet")
+	}
+}

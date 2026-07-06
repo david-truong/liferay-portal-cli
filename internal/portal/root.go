@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 )
 
@@ -102,9 +103,15 @@ func workspaceBundleDir(portalRoot string) (string, error) {
 	return filepath.Clean(filepath.Join(portalRoot, dir)), nil
 }
 
-// FindTomcatDir resolves the Tomcat directory from app.server.properties
-// rather than scanning the filesystem, so the version is always authoritative.
+// FindTomcatDir resolves the Tomcat directory. For a Monorepo root this reads
+// app.server.properties (the version is always authoritative there). For a
+// Workspace root, which has no such property, it globs bundleDir/tomcat-*
+// and picks the numerically highest version.
 func FindTomcatDir(portalRoot string) (string, error) {
+	if DetectProjectType(portalRoot) == Workspace {
+		return workspaceTomcatDir(portalRoot)
+	}
+
 	props := readAppServerProps(portalRoot)
 
 	dir := props["app.server.tomcat.dir"]
@@ -121,6 +128,56 @@ func FindTomcatDir(portalRoot string) (string, error) {
 	}
 
 	return filepath.Clean(resolveProperty(dir, portalRoot, props)), nil
+}
+
+func workspaceTomcatDir(portalRoot string) (string, error) {
+	bundleDir, err := BundleDir(portalRoot)
+	if err != nil {
+		return "", err
+	}
+	matches, err := filepath.Glob(filepath.Join(bundleDir, "tomcat-*"))
+	if err != nil {
+		return "", err
+	}
+	if len(matches) == 0 {
+		return "", fmt.Errorf("no tomcat-* directory found under %s — run \"liferay build\" to assemble the bundle first", bundleDir)
+	}
+	return highestVersionDir(matches), nil
+}
+
+// highestVersionDir returns the entry from a set of ".../tomcat-X.Y.Z" paths
+// with the numerically highest version, comparing dot-separated segments as
+// integers so "tomcat-10.1.15" correctly beats "tomcat-9.0.99".
+func highestVersionDir(paths []string) string {
+	best := paths[0]
+	for _, p := range paths[1:] {
+		if compareVersions(tomcatVersion(best), tomcatVersion(p)) < 0 {
+			best = p
+		}
+	}
+	return best
+}
+
+func tomcatVersion(path string) string {
+	return strings.TrimPrefix(filepath.Base(path), "tomcat-")
+}
+
+func compareVersions(a, b string) int {
+	as := strings.Split(a, ".")
+	bs := strings.Split(b, ".")
+	for i := 0; i < len(as) || i < len(bs); i++ {
+		var av, bv int
+		if i < len(as) {
+			av, _ = strconv.Atoi(as[i])
+		}
+		if i < len(bs) {
+			bv, _ = strconv.Atoi(bs[i])
+		}
+		if av != bv {
+			return av - bv
+		}
+	}
+	return 0
 }
 
 func readAppServerProps(portalRoot string) map[string]string {
