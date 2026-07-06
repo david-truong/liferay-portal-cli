@@ -289,7 +289,7 @@ func ensureDB(bundleDir string) (docker.Ports, error) {
 	if err := checkStockPorts(worktreeRoot); err != nil {
 		return docker.Ports{}, err
 	}
-	state, ports, err := docker.Setup(worktreeRoot, bundleDir, "", isPrimaryWorktree(worktreeRoot))
+	state, ports, err := docker.Setup(worktreeRoot, bundleDir, "", isPrimarySlot(worktreeRoot))
 	if err != nil {
 		return docker.Ports{}, fmt.Errorf("setting up docker compose: %w", err)
 	}
@@ -323,12 +323,13 @@ func resolvePaths() (tomcat.Paths, error) {
 
 // currentSlot resolves the bundle's slot from persisted Docker state, falling
 // back to slot 0 for a primary checkout that has never started its stack and
-// to -1 (unknown, not stock) for a linked worktree without state.
+// to -1 (unknown, not stock) for a linked worktree, or a Liferay Workspace,
+// without state.
 func currentSlot(worktreeRoot string) int {
 	if st, ok := docker.LoadState(worktreeRoot); ok {
 		return st.Slot
 	}
-	if isLinkedWorktree(worktreeRoot) {
+	if isLinkedWorktree(worktreeRoot) || portal.DetectProjectType(worktreeRoot) == portal.Workspace {
 		return -1
 	}
 	return 0

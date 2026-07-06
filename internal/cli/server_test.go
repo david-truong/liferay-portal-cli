@@ -2,12 +2,37 @@ package cli
 
 import (
 	"bytes"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/david-truong/liferay-portal-cli/internal/docker"
 	"github.com/david-truong/liferay-portal-cli/internal/tomcat"
 )
+
+func TestCurrentSlot_WorkspaceWithoutStateReturnsUnknown(t *testing.T) {
+	root := t.TempDir()
+	writeWorkspaceMarker(t, root)
+
+	if got := currentSlot(root); got != -1 {
+		t.Errorf("currentSlot = %d, want -1 for a Workspace project with no persisted state", got)
+	}
+}
+
+func TestCurrentSlot_PrimaryCheckoutWithoutStateReturnsZero(t *testing.T) {
+	root := t.TempDir()
+	if err := os.WriteFile(filepath.Join(root, "build.xml"), nil, 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Mkdir(filepath.Join(root, "modules"), 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	if got := currentSlot(root); got != 0 {
+		t.Errorf("currentSlot = %d, want 0 for a primary monorepo checkout with no persisted state", got)
+	}
+}
 
 func TestServerStatusText_Running(t *testing.T) {
 	var buf bytes.Buffer
