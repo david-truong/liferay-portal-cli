@@ -1,6 +1,7 @@
 package portal
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
@@ -146,6 +147,12 @@ func TestMissingModuleSuggestion(t *testing.T) {
 	msg := err.Error()
 	if !contains(msg, "change-tracking-web") {
 		t.Errorf("suggestion missing expected module name; got: %s", msg)
+	}
+	if !contains(msg, "Did you mean") {
+		t.Errorf("expected message to still contain 'Did you mean', got: %s", msg)
+	}
+	if !errors.Is(err, ErrModuleNotFound) {
+		t.Errorf("expected err to wrap ErrModuleNotFound, got: %v", err)
 	}
 }
 

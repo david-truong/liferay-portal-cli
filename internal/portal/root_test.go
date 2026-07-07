@@ -1,6 +1,7 @@
 package portal
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -73,6 +74,9 @@ func TestFindRoot_NotInsideRepo(t *testing.T) {
 	_, err := FindRoot(t.TempDir())
 	if err == nil {
 		t.Error("expected error when not inside a portal repo")
+	}
+	if !errors.Is(err, ErrNotInPortal) {
+		t.Errorf("expected err to wrap ErrNotInPortal, got: %v", err)
 	}
 }
 

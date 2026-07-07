@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -80,6 +81,29 @@ func TestLoadOrInitStateRejectsUnsupportedEngine(t *testing.T) {
 	_, err := loadOrInitState(dir, "oracle", dir, true)
 	if err == nil {
 		t.Error("expected error for unsupported engine")
+	}
+}
+
+// TestLoadOrInitStateFailsLoudlyOnCorruptFile guards MED-5: a truncated or
+// otherwise unparseable ports.json used to be silently treated as "no state
+// yet", which allocates slot 0 — the slot reserved for the primary
+// checkout — for what may be a linked worktree with containers already
+// running under a different slot. Corruption must surface as an error
+// naming the file, never as a fabricated State{Slot: 0}.
+func TestLoadOrInitStateFailsLoudlyOnCorruptFile(t *testing.T) {
+	home := t.TempDir(); t.Setenv("HOME", home); t.Setenv("USERPROFILE", home)
+	dir := t.TempDir()
+	portsFile := filepath.Join(dir, "ports.json")
+	if err := os.WriteFile(portsFile, []byte("{not valid json"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := loadOrInitState(dir, "", dir, true)
+	if err == nil {
+		t.Fatalf("expected error for corrupt %s, got state %+v", portsFile, got)
+	}
+	if !strings.Contains(err.Error(), portsFile) {
+		t.Errorf("error %q should name the corrupt file %q", err.Error(), portsFile)
 	}
 }
 
@@ -183,6 +207,41 @@ func TestWritePortalExtWhitelistsSlotHost(t *testing.T) {
 	want := "virtual.hosts.valid.hosts=localhost,127.0.0.1,[::1],[0:0:0:0:0:0:0:1],*.liferay.test"
 	if !strings.Contains(string(got), want) {
 		t.Errorf("missing %q in:\n%s", want, got)
+	}
+}
+
+// TestWritePortalExtPreservesModeAndIsAtomic guards MED-6a: portal-ext.properties
+// is owned by the user (it's their bundle config, only a managed block inside
+// it belongs to liferay-cli), so a rewrite must preserve the file's existing
+// mode and never leave a stray temp file behind — a torn write here would
+// destroy the user's own lines that writePortalExt re-emits from its read.
+func TestWritePortalExtPreservesModeAndIsAtomic(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "portal-ext.properties")
+	if err := os.WriteFile(path, []byte("company.default.locale=en_US\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := writePortalExt(dir, EngineMySQL, PortsFromSlot(0)); err != nil {
+		t.Fatalf("writePortalExt: %v", err)
+	}
+
+	if runtime.GOOS != "windows" { // POSIX modes are not preserved on Windows
+		info, err := os.Stat(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if info.Mode().Perm() != 0600 {
+			t.Errorf("mode = %v, want existing file's mode 0600 preserved", info.Mode().Perm())
+		}
+	}
+
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) != 1 || entries[0].Name() != "portal-ext.properties" {
+		t.Errorf("directory should contain only portal-ext.properties, got %v", entries)
 	}
 }
 

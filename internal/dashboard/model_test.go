@@ -3,6 +3,7 @@ package dashboard
 import (
 	"fmt"
 	"os"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -87,6 +88,9 @@ func TestTabSwitching(t *testing.T) {
 }
 
 func TestCommandPrompt(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("stubs SelfExe with /bin/echo, which doesn't exist on Windows")
+	}
 	m := testModel()
 	m.cfg.SelfExe = "/bin/echo"
 	m.active = 1
@@ -156,6 +160,9 @@ func runBatch(t *testing.T, cmd tea.Cmd) cmdDoneMsg {
 }
 
 func TestResetSequence(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("stubs SelfExe with /bin/echo, which doesn't exist on Windows")
+	}
 	m := testModel()
 	m.cfg.SelfExe = "/bin/echo"
 	m.active = 1
@@ -318,6 +325,9 @@ func TestDeleteRequiresConfirmation(t *testing.T) {
 }
 
 func TestDeleteConfirmedRunsRemoval(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("stubs SelfExe with /bin/echo, which doesn't exist on Windows")
+	}
 	m := testModel()
 	m.cfg.SelfExe = "/bin/echo"
 	m.active = 1

@@ -89,7 +89,39 @@ func Snapshot(paths Paths, stateDir string) (string, error) {
 		}
 	}
 
+	// PatchBundle only calls Snapshot when the bundle is confirmed pristine
+	// (see isPatchedForSlot), so any snapshot dir other than the one just
+	// created was captured before an intervening rebuild or edit and no
+	// longer reflects the bundle's true stock state. Prune them so
+	// bundle-snapshot/ doesn't grow by one directory per "server start".
+	if err := pruneOtherSnapshots(stateDir, dir); err != nil {
+		return "", err
+	}
+
 	return dir, nil
+}
+
+// pruneOtherSnapshots removes every snapshot directory under
+// stateDir/bundle-snapshot/ except keep.
+func pruneOtherSnapshots(stateDir, keep string) error {
+	base := filepath.Join(stateDir, snapshotRoot)
+	entries, err := os.ReadDir(base)
+	if err != nil {
+		return fmt.Errorf("reading %s: %w", base, err)
+	}
+	for _, e := range entries {
+		if !e.IsDir() {
+			continue
+		}
+		dir := filepath.Join(base, e.Name())
+		if dir == keep {
+			continue
+		}
+		if err := os.RemoveAll(dir); err != nil {
+			return fmt.Errorf("pruning old snapshot %s: %w", dir, err)
+		}
+	}
+	return nil
 }
 
 // RestoreFromSnapshot copies the snapshotted files back to their original

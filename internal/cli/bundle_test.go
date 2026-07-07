@@ -2,6 +2,7 @@ package cli
 
 import (
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strconv"
@@ -126,9 +127,23 @@ func TestUnpatchBundle_RefusesWhileTomcatRunning(t *testing.T) {
 		t.Fatalf("PatchBundle: %v", err)
 	}
 
-	// Write our own PID into the tomcat.pid file. tomcat.Status will
-	// then report "alive" because the OS confirms the PID is live.
-	if err := os.WriteFile(paths.PidFile, []byte(strconv.Itoa(os.Getpid())), 0644); err != nil {
+	// tomcat.Status now guards against PID reuse by checking that the live
+	// process's command line references paths.Bundle (mirroring
+	// ForceStop), so a live PID alone — e.g. this test binary's own PID —
+	// no longer reads as "running". Spawn a process whose argv contains
+	// the bundle path — without a shell in between, since sh may exec its
+	// single command in place and drop a trailing comment from the ps
+	// output.
+	watched := filepath.Join(paths.Bundle, "watched")
+	if err := os.WriteFile(watched, nil, 0644); err != nil {
+		t.Fatal(err)
+	}
+	cmd := exec.Command("tail", "-f", watched)
+	if err := cmd.Start(); err != nil {
+		t.Fatalf("spawn: %v", err)
+	}
+	t.Cleanup(func() { _ = cmd.Process.Kill() })
+	if err := os.WriteFile(paths.PidFile, []byte(strconv.Itoa(cmd.Process.Pid)), 0644); err != nil {
 		t.Fatal(err)
 	}
 

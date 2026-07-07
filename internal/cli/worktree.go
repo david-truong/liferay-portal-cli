@@ -2,6 +2,7 @@ package cli
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -392,6 +393,14 @@ func removeWorktree(absTarget string, assumeYes bool, in io.Reader, out io.Write
 			"refusing to remove the primary worktree at %s", absTarget)
 	}
 
+	// A path that "git worktree list" doesn't know about is not ours to
+	// delete — it could be a typo, an arbitrary directory, or a subdirectory
+	// of the repo. Without this check, removeDir below would os.RemoveAll it.
+	if !isRegisteredWorktree(absTarget) {
+		return ExitErr(ExitGeneric,
+			"%s is not a linked worktree of this repository (see \"git worktree list\") — refusing to delete", absTarget)
+	}
+
 	stateDir := state.Dir(absTarget)
 
 	// Stop the slot's Docker stack and Tomcat before deleting anything, so
@@ -562,6 +571,37 @@ func isPrimaryWorktree(worktreeRoot string) bool {
 	return abs == primary
 }
 
+// isRegisteredWorktree reports whether absTarget is one of the paths listed
+// by "git worktree list" for the repository in the current working
+// directory. Paths are compared after resolving symlinks (falling back to
+// the plain absolute path when that fails, e.g. on a path that doesn't
+// exist) so a macOS /tmp vs /private/tmp difference doesn't cause a false
+// negative.
+func isRegisteredWorktree(absTarget string) bool {
+	porcelain, err := gitOutput("worktree", "list", "--porcelain")
+	if err != nil {
+		return false
+	}
+	primary, _ := gitPrimaryRoot("")
+	want := resolveSymlinksOrSelf(absTarget)
+	for _, entry := range parseWorktreePorcelain(porcelain, primary) {
+		if resolveSymlinksOrSelf(entry.Path) == want {
+			return true
+		}
+	}
+	return false
+}
+
+// resolveSymlinksOrSelf resolves symlinks in path, returning path unchanged
+// if that fails (e.g. the path doesn't exist).
+func resolveSymlinksOrSelf(path string) string {
+	resolved, err := filepath.EvalSymlinks(path)
+	if err != nil {
+		return path
+	}
+	return resolved
+}
+
 // gitPrimaryRoot returns the primary worktree root (the directory whose
 // .git is the common dir, not a "gitdir:" file). dir scopes the git
 // invocation; pass "" to inherit the current process working directory.
@@ -590,6 +630,14 @@ func gitOutput(args ...string) (string, error) {
 	cmd := exec.Command("git", args...)
 	out, err := cmd.Output()
 	if err != nil {
+		// cmd.Output() discards stderr on failure, so without this the
+		// caller only ever sees a bare "exit status 128" — fold git's own
+		// explanation back in.
+		var exitErr *exec.ExitError
+		if errors.As(err, &exitErr) && len(exitErr.Stderr) > 0 {
+			stderr := strings.TrimSpace(string(exitErr.Stderr))
+			return "", fmt.Errorf("git %s: %w: %s", strings.Join(args, " "), err, stderr)
+		}
 		return "", err
 	}
 	return string(out), nil

@@ -2,10 +2,10 @@ package cli
 
 import (
 	"fmt"
-	"os"
 	"os/exec"
 	"path/filepath"
 
+	"github.com/david-truong/liferay-portal-cli/internal/logrun"
 	"github.com/spf13/cobra"
 )
 
@@ -47,8 +47,5 @@ func runPlaywright(cmd *cobra.Command, args []string) error {
 
 	execCmd := exec.Command(npxPath, "playwright", "test", "--grep", playwrightTests)
 	execCmd.Dir = playwrightDir
-	execCmd.Stdout = os.Stdout
-	execCmd.Stderr = os.Stderr
-	execCmd.Stdin = os.Stdin
-	return execCmd.Run()
+	return logrun.Run(execCmd, logrun.Options{Label: "playwright", Verbose: verbose, WorktreeRoot: portalRoot})
 }

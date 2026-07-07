@@ -3,6 +3,7 @@ package docker
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -16,6 +17,11 @@ import (
 	"github.com/david-truong/liferay-portal-cli/internal/fsutil"
 	"github.com/david-truong/liferay-portal-cli/internal/state"
 )
+
+// ErrUnavailable is the sentinel wrapped by checkDocker's failure cases so
+// callers can distinguish "docker isn't usable" from other errors via
+// errors.Is, without depending on message text.
+var ErrUnavailable = errors.New("docker unavailable")
 
 // Engine names recognized by the CLI. Hypersonic means "no Docker container; use
 // Liferay's built-in HSQL", so it's modelled here for completeness but Setup skips
@@ -470,7 +476,16 @@ func loadOrInitState(stateDir, requestedEngine, worktreeRoot string, isPrimary b
 	var s State
 
 	if data, err := os.ReadFile(portsFile); err == nil {
-		_ = json.Unmarshal(data, &s)
+		// A corrupt or truncated file must never be mistaken for "no state
+		// yet" — that would silently fall through to allocateFreshSlot,
+		// which hands out Slot 0 (reserved for the primary checkout) to
+		// what may be a linked worktree with containers already running
+		// under its real slot.
+		if err := json.Unmarshal(data, &s); err != nil {
+			return State{}, fmt.Errorf(
+				"state file %s is corrupt — delete %s and re-run \"liferay db start\"",
+				portsFile, stateDir)
+		}
 	}
 
 	if !isPersisted(portsFile) {
@@ -633,7 +648,9 @@ func writePortalExt(bundleDir, engine string, ports Ports) error {
 	sb.WriteString(configurationOverrides)
 	sb.WriteString(managedBlockEnd + ".\n")
 
-	return os.WriteFile(path, []byte(sb.String()), 0644)
+	// Atomic: this rewrite re-emits the user's own lines it just read above,
+	// so a crash mid-write must never leave portal-ext.properties truncated.
+	return state.WriteFileAtomic(path, []byte(sb.String()), 0644)
 }
 
 // CheckAvailable reports whether the docker CLI is on PATH and its daemon is
@@ -646,16 +663,16 @@ func CheckAvailable() error {
 func checkDocker() error {
 	if _, err := exec.LookPath("docker"); err != nil {
 		return fmt.Errorf(
-			"docker not found on PATH\n\n" +
-				"Install Docker:\n" +
-				"  macOS/Windows: https://www.docker.com/products/docker-desktop\n" +
-				"  Linux: https://docs.docker.com/engine/install/")
+			"%w: not found on PATH\n\n"+
+				"Install Docker:\n"+
+				"  macOS/Windows: https://www.docker.com/products/docker-desktop\n"+
+				"  Linux: https://docs.docker.com/engine/install/", ErrUnavailable)
 	}
 	cmd := exec.Command("docker", "info")
 	cmd.Stdout = nil
 	cmd.Stderr = nil
 	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("docker is not running — start Docker Desktop (or the Docker daemon) and try again")
+		return fmt.Errorf("%w: the daemon is not running — start Docker Desktop (or the Docker daemon) and try again", ErrUnavailable)
 	}
 	return nil
 }
