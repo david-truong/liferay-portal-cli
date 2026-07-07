@@ -5,6 +5,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 )
 
@@ -32,12 +33,14 @@ func TestWriteHostsFileAt_RewritesContentAndPreservesMode(t *testing.T) {
 		t.Errorf("content = %q, want %q", got, want)
 	}
 
-	info, err := os.Stat(path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if info.Mode().Perm() != 0644 {
-		t.Errorf("mode = %v, want 0644 preserved", info.Mode().Perm())
+	if runtime.GOOS != "windows" { // POSIX modes are not preserved on Windows
+		info, err := os.Stat(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if info.Mode().Perm() != 0644 {
+			t.Errorf("mode = %v, want 0644 preserved", info.Mode().Perm())
+		}
 	}
 }
 
@@ -68,6 +71,9 @@ func TestWriteHostsFileAt_NoStrayTempFile(t *testing.T) {
 // read-only directory must still surface as a permission error even though
 // the failure now happens in os.CreateTemp rather than os.WriteFile.
 func TestWriteHostsFileAt_PermissionErrorSurfacesForSudoHint(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("a read-only directory does not block file creation on Windows")
+	}
 	if os.Geteuid() == 0 {
 		t.Skip("running as root — directory permissions don't block writes")
 	}

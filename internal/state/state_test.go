@@ -3,6 +3,7 @@ package state
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -132,6 +133,9 @@ func TestWriteFileAtomic_OverwritesExisting(t *testing.T) {
 }
 
 func TestWriteFileAtomic_PreservesExistingMode(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("POSIX file modes are not preserved on Windows")
+	}
 	dir := t.TempDir()
 	path := filepath.Join(dir, "out.txt")
 
@@ -156,6 +160,9 @@ func TestWriteFileAtomic_PreservesExistingMode(t *testing.T) {
 }
 
 func TestWriteFileAtomic_UsesDefaultModeForNewFile(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("POSIX file modes are not preserved on Windows")
+	}
 	dir := t.TempDir()
 	path := filepath.Join(dir, "out.txt")
 

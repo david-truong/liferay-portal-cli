@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -225,12 +226,14 @@ func TestWritePortalExtPreservesModeAndIsAtomic(t *testing.T) {
 		t.Fatalf("writePortalExt: %v", err)
 	}
 
-	info, err := os.Stat(path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if info.Mode().Perm() != 0600 {
-		t.Errorf("mode = %v, want existing file's mode 0600 preserved", info.Mode().Perm())
+	if runtime.GOOS != "windows" { // POSIX modes are not preserved on Windows
+		info, err := os.Stat(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if info.Mode().Perm() != 0600 {
+			t.Errorf("mode = %v, want existing file's mode 0600 preserved", info.Mode().Perm())
+		}
 	}
 
 	entries, err := os.ReadDir(dir)
