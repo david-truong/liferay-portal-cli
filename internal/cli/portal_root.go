@@ -47,7 +47,7 @@ func checkStockPorts(worktreeRoot string) error {
 	}
 	ports := docker.PortsFromSlot(0)
 	if docker.AnyPortInUse(docker.ProbePorts(ports)...) {
-		return fmt.Errorf("stock ports are already in use — run from a worktree to use alternate ports")
+		return ExitErr(ExitPortCollision, "stock ports are already in use — run from a worktree to use alternate ports")
 	}
 	return nil
 }

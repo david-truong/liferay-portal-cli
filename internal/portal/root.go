@@ -52,6 +52,11 @@ func isWorkspaceRoot(dir string) bool {
 	return false
 }
 
+// ErrNotInPortal is the sentinel wrapped by FindRoot's failure so callers can
+// distinguish "not inside a portal" from other errors via errors.Is, without
+// depending on message text.
+var ErrNotInPortal = errors.New("not inside a liferay-portal repository or Liferay Workspace (build.xml + modules/, or a workspace-plugin build.gradle/settings.gradle, not found)")
+
 // FindRoot walks up from dir looking for a Liferay project root — either a
 // monorepo root (build.xml + modules/) or a Liferay Workspace root (a
 // com.liferay.workspace Gradle plugin application).
@@ -63,7 +68,7 @@ func FindRoot(dir string) (string, error) {
 		}
 		parent := filepath.Dir(d)
 		if parent == d {
-			return "", errors.New("not inside a liferay-portal repository or Liferay Workspace (build.xml + modules/, or a workspace-plugin build.gradle/settings.gradle, not found)")
+			return "", ErrNotInPortal
 		}
 		d = parent
 	}

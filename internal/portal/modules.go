@@ -1,12 +1,19 @@
 package portal
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"sort"
 	"strings"
 )
+
+// ErrModuleNotFound is the sentinel wrapped by resolveFromMap's "no match"
+// case so callers can distinguish it via errors.Is regardless of message
+// text. The same index type serves modules and client extensions, so the
+// sentinel name reflects the more common noun rather than one per index.
+var ErrModuleNotFound = errors.New("module not found")
 
 // moduleRoots are paths relative to the portal root that are walked for deployable modules.
 var moduleRoots = []string{
@@ -158,7 +165,8 @@ func (idx *ModuleIndex) resolveFromMap(name string, m map[string][]string, sugge
 	paths := m[name]
 	switch len(paths) {
 	case 0:
-		return "", fmt.Errorf("no %s named %q\n\nDid you mean:\n%s", idx.noun, name, suggestionMsg)
+		msg := fmt.Sprintf("no %s named %q\n\nDid you mean:\n%s", idx.noun, name, suggestionMsg)
+		return "", fmt.Errorf("%s\n%w", strings.TrimRight(msg, "\n"), ErrModuleNotFound)
 	case 1:
 		return paths[0], nil
 	default:
