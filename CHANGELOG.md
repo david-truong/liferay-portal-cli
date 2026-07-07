@@ -7,6 +7,63 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [v1.4.0] - 2026-07-07
+
+### Fixed — `worktree remove`
+
+- Refuses to delete a path that is not a registered linked worktree of the
+  repository. Previously any path passed to `liferay worktree remove` was
+  recursively deleted once confirmed — with `--yes` or
+  `LIFERAY_CLI_ASSUME_YES=1` a typo could destroy an arbitrary directory.
+- git failures now surface git's own stderr instead of a bare
+  "exit status 128".
+
+### Fixed — port probing
+
+- The port probe now detects services bound to `0.0.0.0` (Tomcat,
+  docker-proxy). On macOS/BSD, `SO_REUSEADDR` let the old loopback-only bind
+  probe report such ports as free, so slot allocation could claim ports a
+  non-CLI service already held.
+- `db start` / `server restart` on a primary checkout no longer fail with
+  "stock ports are already in use" when the ports are held by this
+  checkout's own slot-0 stack.
+
+### Fixed — `bundle unpatch`
+
+- Restores true stock content after any number of `server start` runs. The
+  pre-patch snapshot is now taken only while the bundle is pristine for the
+  slot (re-armed after a rebuild resets `server.xml`), instead of on every
+  start — previously the second start snapshotted already-patched files, so
+  unpatch restored patched-over-patched while reporting success.
+- Obsolete snapshot directories are pruned instead of accumulating one per
+  `server start`.
+
+### Fixed — exit codes
+
+- The documented codes are now actually emitted: 2 (not inside a portal),
+  3 (Docker unavailable), 4 (stock-port collision), and 5 (module not
+  found) previously all collapsed to the generic 1 on most commands.
+
+### Fixed — state and config writes
+
+- A corrupt `ports.json` now fails with an error naming the file and the
+  state directory to delete, instead of silently claiming slot 0 — which
+  could put a linked worktree on the primary checkout's stock ports.
+- `portal-ext.properties` and `/etc/hosts` are rewritten atomically
+  (temp file + rename, preserving mode), so a crash mid-write can no longer
+  truncate user-owned content.
+
+### Fixed — `logs`, `playwright`, `server status`
+
+- `liferay logs` falls back to the newest transcript by modification time;
+  the old lexicographic pick could show a stale log when labels differed.
+- `liferay playwright` routes output through the standard log-capture path
+  like every other runner, honoring `--verbose` and no longer inheriting
+  stdin.
+- `server status` applies the same PID-reuse guard as force-stop: a
+  recycled PID whose command line doesn't reference the bundle no longer
+  reports a phantom running Tomcat.
+
 ## [v1.3.0] - 2026-06-18
 
 ### Fixed — `worktree remove`
