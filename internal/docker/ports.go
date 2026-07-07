@@ -3,7 +3,14 @@ package docker
 import (
 	"fmt"
 	"net"
+	"time"
 )
+
+// dialProbeTimeout bounds the connect-based check in isPortInUse. A dial to a
+// free port fails immediately with ECONNREFUSED, so this only matters for a
+// port that's filtered or otherwise slow to respond — keep it short since a
+// full slot probes 11 ports.
+const dialProbeTimeout = 250 * time.Millisecond
 
 // Ports holds every host-side port a Liferay instance claims. Slot 0 is the
 // stock configuration (Liferay defaults, no bundle edits). Slot N > 0 shifts
@@ -111,11 +118,30 @@ func AnyPortInUse(ports ...int) bool {
 	return false
 }
 
+// isPortInUse reports whether port is unavailable for a fresh bind. A bind
+// check alone is not enough: Go sets SO_REUSEADDR on listeners, and on
+// macOS/BSD that lets us bind 127.0.0.1:port even while another process
+// (Tomcat, docker-proxy) holds 0.0.0.0:port — so a real service can look
+// free. We also try a wildcard bind (catches anything already on 0.0.0.0)
+// and, as a last resort, dial the port — if something answers, it's in use
+// regardless of what the bind checks reported.
 func isPortInUse(port int) bool {
-	ln, err := net.Listen("tcp", fmt.Sprintf("127.0.0.1:%d", port))
+	lnWildcard, err := net.Listen("tcp", fmt.Sprintf(":%d", port))
 	if err != nil {
 		return true
 	}
-	ln.Close()
-	return false
+	lnWildcard.Close()
+
+	lnLoopback, err := net.Listen("tcp", fmt.Sprintf("127.0.0.1:%d", port))
+	if err != nil {
+		return true
+	}
+	lnLoopback.Close()
+
+	conn, err := net.DialTimeout("tcp", fmt.Sprintf("127.0.0.1:%d", port), dialProbeTimeout)
+	if err != nil {
+		return false
+	}
+	conn.Close()
+	return true
 }

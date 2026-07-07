@@ -54,13 +54,38 @@ func ID(worktreeRoot string) string {
 }
 
 // WriteFileAtomic writes data to path via a temp file + rename so concurrent
-// readers always see either the old or new content, never a torn write.
-func WriteFileAtomic(path string, data []byte, mode os.FileMode) error {
-	tmp := path + ".tmp"
-	if err := os.WriteFile(tmp, data, mode); err != nil {
+// readers always see either the old or new content, never a torn write. The
+// temp file is created in path's own directory so the rename can't cross a
+// filesystem boundary, and is removed if anything fails before the rename
+// commits. If path already exists, its mode is preserved (some callers — the
+// bundle's portal-ext.properties, /etc/hosts — share the file with the user
+// or the OS and must not have permissions reset out from under them);
+// otherwise the new file gets defaultMode.
+func WriteFileAtomic(path string, data []byte, defaultMode os.FileMode) error {
+	mode := defaultMode
+	if info, err := os.Stat(path); err == nil {
+		mode = info.Mode().Perm()
+	}
+
+	tmp, err := os.CreateTemp(filepath.Dir(path), filepath.Base(path)+".*.tmp")
+	if err != nil {
 		return err
 	}
-	return os.Rename(tmp, path)
+	tmpPath := tmp.Name()
+	defer os.Remove(tmpPath) // no-op once the rename below has succeeded
+
+	_, writeErr := tmp.Write(data)
+	closeErr := tmp.Close()
+	if writeErr != nil {
+		return writeErr
+	}
+	if closeErr != nil {
+		return closeErr
+	}
+	if err := os.Chmod(tmpPath, mode); err != nil {
+		return err
+	}
+	return os.Rename(tmpPath, path)
 }
 
 // DisplayHome renders p with the user's home directory replaced by "~". If

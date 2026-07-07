@@ -470,7 +470,16 @@ func loadOrInitState(stateDir, requestedEngine, worktreeRoot string, isPrimary b
 	var s State
 
 	if data, err := os.ReadFile(portsFile); err == nil {
-		_ = json.Unmarshal(data, &s)
+		// A corrupt or truncated file must never be mistaken for "no state
+		// yet" — that would silently fall through to allocateFreshSlot,
+		// which hands out Slot 0 (reserved for the primary checkout) to
+		// what may be a linked worktree with containers already running
+		// under its real slot.
+		if err := json.Unmarshal(data, &s); err != nil {
+			return State{}, fmt.Errorf(
+				"state file %s is corrupt — delete %s and re-run \"liferay db start\"",
+				portsFile, stateDir)
+		}
 	}
 
 	if !isPersisted(portsFile) {
@@ -633,7 +642,9 @@ func writePortalExt(bundleDir, engine string, ports Ports) error {
 	sb.WriteString(configurationOverrides)
 	sb.WriteString(managedBlockEnd + ".\n")
 
-	return os.WriteFile(path, []byte(sb.String()), 0644)
+	// Atomic: this rewrite re-emits the user's own lines it just read above,
+	// so a crash mid-write must never leave portal-ext.properties truncated.
+	return state.WriteFileAtomic(path, []byte(sb.String()), 0644)
 }
 
 // CheckAvailable reports whether the docker CLI is on PATH and its daemon is
