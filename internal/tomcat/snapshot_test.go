@@ -152,6 +152,149 @@ func TestSnapshot_RestoresAbsentOSGiConfigs(t *testing.T) {
 	}
 }
 
+// TestPatchBundle_DoublePatchThenUnpatchRestoresStock is the regression test
+// for audit finding HIGH-3: PatchBundle used to snapshot unconditionally on
+// every call, so a second "liferay server start" against an already-patched
+// bundle snapshotted the *patched* files as if they were pristine. From then
+// on, `bundle unpatch` restored patched-over-patched and reported success
+// while never getting back to stock.
+func TestPatchBundle_DoublePatchThenUnpatchRestoresStock(t *testing.T) {
+	paths := fakeBundle(t)
+	stock := snapshotFingerprint(t, paths)
+
+	if err := PatchBundle(paths, docker.PortsFromSlot(1)); err != nil {
+		t.Fatalf("first PatchBundle: %v", err)
+	}
+	if err := PatchBundle(paths, docker.PortsFromSlot(1)); err != nil {
+		t.Fatalf("second PatchBundle: %v", err)
+	}
+
+	stateDir := filepath.Dir(paths.PidFile)
+	snapshotDir, ok, err := MostRecentSnapshot(stateDir)
+	if err != nil {
+		t.Fatalf("MostRecentSnapshot: %v", err)
+	}
+	if !ok {
+		t.Fatal("expected a snapshot to exist after PatchBundle")
+	}
+
+	if err := RestoreFromSnapshot(snapshotDir, paths); err != nil {
+		t.Fatalf("RestoreFromSnapshot: %v", err)
+	}
+
+	restored := snapshotFingerprint(t, paths)
+	for path, want := range stock {
+		if got := restored[path]; got != want {
+			t.Errorf("file %s not restored to stock after two patch cycles\n--- want (stock) ---\n%s\n--- got ---\n%s",
+				path, want, got)
+		}
+	}
+}
+
+// rebuildFiles are the subset of PatchBundle's targets that a full `ant all`
+// rebuild actually resets to stock: it re-extracts the Tomcat directory
+// (server.xml, setenv.sh) and the ROOT webapp (the embedded
+// portal-developer.properties), per the doc comment on PatchBundle. The
+// bundle-root portal-developer.properties and glowroot/admin.json live
+// outside the rebuilt artifacts and are untouched by a rebuild.
+func rebuildFiles(paths Paths) []string {
+	return []string{
+		filepath.Join(paths.Tomcat, "conf", "server.xml"),
+		filepath.Join(paths.Bin, "setenv.sh"),
+		filepath.Join(paths.Tomcat, "webapps", "ROOT", "WEB-INF", "classes", "portal-developer.properties"),
+	}
+}
+
+// simulateRebuild resets the files an `ant all` rebuild resets back to their
+// stock content, and removes the osgi/configs directory PatchBundle wrote.
+func simulateRebuild(t *testing.T, paths Paths, stock map[string]string) {
+	t.Helper()
+	for _, path := range rebuildFiles(paths) {
+		mustWrite(t, path, []byte(stock[path]))
+	}
+	if err := os.RemoveAll(filepath.Join(paths.Bundle, "osgi")); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// TestPatchBundle_RebuildRetakesSnapshotAndUnpatchRestoresStock covers the
+// scenario a naive "only snapshot once" fix would break: `ant all` rewrites
+// server.xml and setenv.sh back to stock and wipes the generated OSGi
+// configs. The next PatchBundle call must recognize the bundle is pristine
+// again and take a fresh snapshot, not reuse the (now stale) first one.
+func TestPatchBundle_RebuildRetakesSnapshotAndUnpatchRestoresStock(t *testing.T) {
+	paths := fakeBundle(t)
+	stock := snapshotFingerprint(t, paths)
+
+	if err := PatchBundle(paths, docker.PortsFromSlot(1)); err != nil {
+		t.Fatalf("first PatchBundle: %v", err)
+	}
+
+	simulateRebuild(t, paths, stock)
+
+	if err := PatchBundle(paths, docker.PortsFromSlot(1)); err != nil {
+		t.Fatalf("second PatchBundle (post-rebuild): %v", err)
+	}
+
+	stateDir := filepath.Dir(paths.PidFile)
+	snapshotDir, ok, err := MostRecentSnapshot(stateDir)
+	if err != nil {
+		t.Fatalf("MostRecentSnapshot: %v", err)
+	}
+	if !ok {
+		t.Fatal("expected a snapshot to exist after PatchBundle")
+	}
+
+	if err := RestoreFromSnapshot(snapshotDir, paths); err != nil {
+		t.Fatalf("RestoreFromSnapshot: %v", err)
+	}
+
+	restored := snapshotFingerprint(t, paths)
+	for _, path := range rebuildFiles(paths) {
+		if got, want := restored[path], stock[path]; got != want {
+			t.Errorf("file %s not restored to stock after rebuild + re-patch\n--- want (stock) ---\n%s\n--- got ---\n%s",
+				path, want, got)
+		}
+	}
+}
+
+// TestPatchBundle_PrunesOldSnapshots asserts snapshot dirs don't accumulate:
+// an idempotent re-patch (same slot, no rebuild) must not add a snapshot at
+// all, and a rebuild's fresh pristine snapshot must replace the stale one
+// rather than piling up alongside it.
+func TestPatchBundle_PrunesOldSnapshots(t *testing.T) {
+	paths := fakeBundle(t)
+	stock := snapshotFingerprint(t, paths)
+
+	if err := PatchBundle(paths, docker.PortsFromSlot(1)); err != nil {
+		t.Fatalf("first PatchBundle: %v", err)
+	}
+	if err := PatchBundle(paths, docker.PortsFromSlot(1)); err != nil {
+		t.Fatalf("idempotent re-patch: %v", err)
+	}
+
+	simulateRebuild(t, paths, stock)
+
+	if err := PatchBundle(paths, docker.PortsFromSlot(1)); err != nil {
+		t.Fatalf("PatchBundle after rebuild: %v", err)
+	}
+
+	stateDir := filepath.Dir(paths.PidFile)
+	entries, err := os.ReadDir(filepath.Join(stateDir, snapshotRoot))
+	if err != nil {
+		t.Fatalf("reading snapshot root: %v", err)
+	}
+	count := 0
+	for _, e := range entries {
+		if e.IsDir() {
+			count++
+		}
+	}
+	if count != 1 {
+		t.Errorf("expected exactly 1 snapshot dir to survive pruning, got %d", count)
+	}
+}
+
 func TestMostRecentSnapshot_NoneExists(t *testing.T) {
 	_, ok, err := MostRecentSnapshot(t.TempDir())
 	if err != nil {

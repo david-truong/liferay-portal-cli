@@ -33,10 +33,22 @@ func PatchBundle(paths Paths, ports docker.Ports) error {
 
 	// Snapshot the pre-patch state of every file the steps below will
 	// touch, so a partial failure or an explicit `liferay bundle unpatch`
-	// can roll back to a known-good state.
-	stateDir := filepath.Dir(paths.PidFile)
-	if _, err := Snapshot(paths, stateDir); err != nil {
-		return fmt.Errorf("snapshotting bundle before patch: %w", err)
+	// can roll back to a known-good state. Only do this when the bundle is
+	// still pristine for this slot — patching is idempotent, so a second
+	// "server start" against an already-patched bundle must not snapshot
+	// the *patched* files as if they were stock, or `bundle unpatch` would
+	// silently restore patched-over-patched. A rebuild (`ant all`) rewrites
+	// server.xml back to stock, so isPatchedForSlot re-arms snapshotting on
+	// the next start after one.
+	patched, err := isPatchedForSlot(paths.Tomcat, ports)
+	if err != nil {
+		return fmt.Errorf("checking bundle patch state: %w", err)
+	}
+	if !patched {
+		stateDir := filepath.Dir(paths.PidFile)
+		if _, err := Snapshot(paths, stateDir); err != nil {
+			return fmt.Errorf("snapshotting bundle before patch: %w", err)
+		}
 	}
 
 	steps := []func() error{
@@ -71,6 +83,26 @@ func patchServerXML(tomcatDir string, ports docker.Ports) error {
 		return fmt.Errorf("reading %s: %w", path, err)
 	}
 	return writePreservingMode(path, []byte(rewriteServerXML(string(data), ports)), 0644)
+}
+
+// isPatchedForSlot reports whether tomcatDir's server.xml already carries the
+// port values PatchBundle would write for this slot. rewriteServerXML is
+// idempotent — applying it again to already-patched content reproduces that
+// same content — so comparing its output against the file's current bytes
+// tells us whether a previous PatchBundle call for this slot already ran,
+// as opposed to the file still being in its stock, pre-patch state (or in
+// stock state again after a rebuild rewrote it back).
+func isPatchedForSlot(tomcatDir string, ports docker.Ports) (bool, error) {
+	path := filepath.Join(tomcatDir, "conf", "server.xml")
+	data, err := os.ReadFile(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return false, nil
+		}
+		return false, fmt.Errorf("reading %s: %w", path, err)
+	}
+	content := string(data)
+	return rewriteServerXML(content, ports) == content, nil
 }
 
 func rewriteServerXML(input string, ports docker.Ports) string {
