@@ -64,6 +64,25 @@ func TestAnyPortInUse(t *testing.T) {
 	}
 }
 
+// TestAnyPortInUseDetectsWildcardBind reproduces HIGH-2: a listener bound to
+// 0.0.0.0 (as real services like Tomcat and docker-proxy do) must be detected
+// even though a loopback-only bind on the same port can still succeed due to
+// SO_REUSEADDR semantics on macOS/BSD. A dial-based check catches this where
+// a bind-only check would miss it.
+func TestAnyPortInUseDetectsWildcardBind(t *testing.T) {
+	ln, err := net.Listen("tcp", "0.0.0.0:0")
+	if err != nil {
+		t.Fatalf("failed to listen: %v", err)
+	}
+	defer ln.Close()
+
+	port := ln.Addr().(*net.TCPAddr).Port
+
+	if !AnyPortInUse(port) {
+		t.Errorf("port %d has a wildcard listener and should be reported in use", port)
+	}
+}
+
 func TestAllocatePortsSkipsOccupied(t *testing.T) {
 	slot0 := PortsFromSlot(0)
 	ln, err := net.Listen("tcp", fmt.Sprintf("127.0.0.1:%d", slot0.Adminer))
