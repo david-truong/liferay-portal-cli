@@ -141,7 +141,11 @@ func Stop(paths Paths) error {
 }
 
 // Status reads the PID file and returns (pid, running). Running means the pid
-// is live and belongs to a java process.
+// is live and, when ps is available to check, its command line references
+// paths.Bundle — the same PID-reuse guard ForceStop applies, since a live pid
+// alone doesn't prove it's still this Tomcat and not an unrelated process
+// that inherited the recycled PID. When ps is unavailable (e.g. Windows),
+// liveness alone is trusted.
 func Status(paths Paths) (int, bool) {
 	data, err := os.ReadFile(paths.PidFile)
 	if err != nil {
@@ -151,7 +155,13 @@ func Status(paths Paths) (int, bool) {
 	if err != nil || pid <= 0 {
 		return 0, false
 	}
-	return pid, processAlive(pid)
+	if !processAlive(pid) {
+		return pid, false
+	}
+	if cmdline, ok := processCommandLine(pid); ok && !strings.Contains(cmdline, paths.Bundle) {
+		return pid, false
+	}
+	return pid, true
 }
 
 // Wipe removes the bundle subdirectories that hold derived state (data,
