@@ -27,20 +27,26 @@ func resultByName(results []fixAction) map[string]fixAction {
 
 func TestEnsureWorktreeFiles_LinksSymlinkCandidates(t *testing.T) {
 	primary, worktree := stageWorktreePair(t)
-	mustWriteCLI(t, filepath.Join(primary, "CLAUDE.md"), []byte("# claude\n"))
+
+	// CLAUDE.local.md is git-ignored, so only this propagation carries it into
+	// a worktree — it must be in the candidate list alongside CLAUDE.md.
+	for _, name := range []string{"CLAUDE.md", "CLAUDE.local.md"} {
+		mustWriteCLI(t, filepath.Join(primary, name), []byte("# "+name+"\n"))
+	}
 
 	results := ensureWorktreeFiles(primary, worktree, portal.Monorepo)
 
-	r, ok := resultByName(results)["CLAUDE.md"]
-	if !ok {
-		t.Fatalf("CLAUDE.md not in results: %+v", results)
-	}
-	if r.action != "linked" && r.action != "copied" {
-		t.Errorf("CLAUDE.md action = %q, want linked|copied", r.action)
-	}
-	dst := filepath.Join(worktree, "CLAUDE.md")
-	if _, err := os.Stat(dst); err != nil {
-		t.Errorf("CLAUDE.md not propagated to worktree: %v", err)
+	for _, name := range []string{"CLAUDE.md", "CLAUDE.local.md"} {
+		r, ok := resultByName(results)[name]
+		if !ok {
+			t.Fatalf("%s not in results: %+v", name, results)
+		}
+		if r.action != "linked" && r.action != "copied" {
+			t.Errorf("%s action = %q, want linked|copied", name, r.action)
+		}
+		if _, err := os.Stat(filepath.Join(worktree, name)); err != nil {
+			t.Errorf("%s not propagated to worktree: %v", name, err)
+		}
 	}
 }
 

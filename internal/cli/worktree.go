@@ -38,7 +38,8 @@ var worktreeAddCmd = &cobra.Command{
 required for Liferay development:
 
   Symlinked (edits sync across worktrees):
-    CLAUDE.md, GEMINI.md, .claude/, .gemini/, .idea/
+    CLAUDE.md, CLAUDE.local.md, GEMINI.md, GEMINI.local.md, .claude/,
+    .gemini/, .idea/
 
   Copied (branch-specific, safe to diverge):
     build.*.properties, test.*.properties, release.*.properties, .env
@@ -651,7 +652,10 @@ func gitRun(args ...string) error {
 }
 
 func collectSymlinkTargets(root string) []string {
-	candidates := []string{"CLAUDE.md", "GEMINI.md", ".claude", ".gemini", ".idea"}
+	candidates := []string{
+		"CLAUDE.md", "CLAUDE.local.md", "GEMINI.md", "GEMINI.local.md",
+		".claude", ".gemini", ".idea",
+	}
 	var result []string
 	for _, c := range candidates {
 		if fsutil.Exists(filepath.Join(root, c)) {
