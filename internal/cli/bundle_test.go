@@ -130,9 +130,15 @@ func TestUnpatchBundle_RefusesWhileTomcatRunning(t *testing.T) {
 	// tomcat.Status now guards against PID reuse by checking that the live
 	// process's command line references paths.Bundle (mirroring
 	// ForceStop), so a live PID alone — e.g. this test binary's own PID —
-	// no longer reads as "running". Spawn a process whose command line
-	// contains the bundle path instead.
-	cmd := exec.Command("sh", "-c", "sleep 60 # "+paths.Bundle)
+	// no longer reads as "running". Spawn a process whose argv contains
+	// the bundle path — without a shell in between, since sh may exec its
+	// single command in place and drop a trailing comment from the ps
+	// output.
+	watched := filepath.Join(paths.Bundle, "watched")
+	if err := os.WriteFile(watched, nil, 0644); err != nil {
+		t.Fatal(err)
+	}
+	cmd := exec.Command("tail", "-f", watched)
 	if err := cmd.Start(); err != nil {
 		t.Fatalf("spawn: %v", err)
 	}

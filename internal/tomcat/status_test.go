@@ -34,8 +34,16 @@ func TestStatus_MatchingCommandLine(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("no ps on windows")
 	}
+	// Spawn a process whose argv contains the bundle path without a shell
+	// in between: sh may exec its single command in place, dropping a
+	// trailing "# <path>" comment from the ps output. tail's argument
+	// survives verbatim.
 	bundleDir := t.TempDir()
-	cmd := exec.Command("sh", "-c", "sleep 60 # "+bundleDir)
+	watched := filepath.Join(bundleDir, "watched")
+	if err := os.WriteFile(watched, nil, 0644); err != nil {
+		t.Fatal(err)
+	}
+	cmd := exec.Command("tail", "-f", watched)
 	if err := cmd.Start(); err != nil {
 		t.Fatalf("spawn: %v", err)
 	}
