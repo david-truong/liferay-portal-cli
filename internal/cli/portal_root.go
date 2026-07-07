@@ -32,9 +32,17 @@ func isLinkedWorktree(portalRoot string) bool {
 
 // checkStockPorts returns an error if the caller is in the main repo (not a
 // linked worktree, and not a Liferay Workspace) and stock ports (slot 0) are
-// already occupied.
+// already occupied. A checkout that has already claimed slot 0 itself is
+// exempt from the probe: its own DB/Tomcat being up is expected, not a
+// collision with someone else's stock instance. Without this exemption, a
+// repeat "db start"/"server restart" on the primary checkout would trip over
+// the CLI's own stack — the port probe can see the CLI's own docker-proxy/
+// Tomcat binds (this is most visible on Linux; see internal/docker/ports.go).
 func checkStockPorts(worktreeRoot string) error {
 	if isLinkedWorktree(worktreeRoot) || portal.DetectProjectType(worktreeRoot) == portal.Workspace {
+		return nil
+	}
+	if s, ok := docker.LoadState(worktreeRoot); ok && s.Slot == 0 {
 		return nil
 	}
 	ports := docker.PortsFromSlot(0)
