@@ -470,7 +470,16 @@ func loadOrInitState(stateDir, requestedEngine, worktreeRoot string, isPrimary b
 	var s State
 
 	if data, err := os.ReadFile(portsFile); err == nil {
-		_ = json.Unmarshal(data, &s)
+		// A corrupt or truncated file must never be mistaken for "no state
+		// yet" — that would silently fall through to allocateFreshSlot,
+		// which hands out Slot 0 (reserved for the primary checkout) to
+		// what may be a linked worktree with containers already running
+		// under its real slot.
+		if err := json.Unmarshal(data, &s); err != nil {
+			return State{}, fmt.Errorf(
+				"state file %s is corrupt — delete %s and re-run \"liferay db start\"",
+				portsFile, stateDir)
+		}
 	}
 
 	if !isPersisted(portsFile) {

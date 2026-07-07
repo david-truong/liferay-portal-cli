@@ -83,6 +83,29 @@ func TestLoadOrInitStateRejectsUnsupportedEngine(t *testing.T) {
 	}
 }
 
+// TestLoadOrInitStateFailsLoudlyOnCorruptFile guards MED-5: a truncated or
+// otherwise unparseable ports.json used to be silently treated as "no state
+// yet", which allocates slot 0 — the slot reserved for the primary
+// checkout — for what may be a linked worktree with containers already
+// running under a different slot. Corruption must surface as an error
+// naming the file, never as a fabricated State{Slot: 0}.
+func TestLoadOrInitStateFailsLoudlyOnCorruptFile(t *testing.T) {
+	home := t.TempDir(); t.Setenv("HOME", home); t.Setenv("USERPROFILE", home)
+	dir := t.TempDir()
+	portsFile := filepath.Join(dir, "ports.json")
+	if err := os.WriteFile(portsFile, []byte("{not valid json"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := loadOrInitState(dir, "", dir, true)
+	if err == nil {
+		t.Fatalf("expected error for corrupt %s, got state %+v", portsFile, got)
+	}
+	if !strings.Contains(err.Error(), portsFile) {
+		t.Errorf("error %q should name the corrupt file %q", err.Error(), portsFile)
+	}
+}
+
 func TestLoadStateNonExistent(t *testing.T) {
 	dir := t.TempDir()
 	_, ok := LoadState(dir)
