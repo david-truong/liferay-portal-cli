@@ -10,6 +10,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/david-truong/liferay-portal-cli/internal/docker"
 	"github.com/david-truong/liferay-portal-cli/internal/state"
@@ -208,9 +209,13 @@ func announce(kind, target string) {
 	fmt.Fprintf(os.Stderr, "[logs: %s — %s]\n", kind, state.DisplayHome(target))
 }
 
-// newestLog returns the .log file with the latest filename in logDir.
-// logrun encodes a nanosecond-precision timestamp as the filename prefix,
-// so lexicographic order matches modification-time order.
+// newestLog returns the .log file with the latest modification time in
+// logDir. logrun encodes the label before the timestamp (e.g.
+// "deploy-20060102-....log"), so filenames don't sort chronologically across
+// different labels — a stale "test-..." archive can lexicographically beat a
+// fresh "deploy-...", which is why this compares mtimes instead. Entries
+// whose Info() fails (e.g. removed mid-scan) are skipped rather than erroring
+// the whole lookup; ties break by name for determinism.
 func newestLog(logDir string) (string, error) {
 	entries, err := os.ReadDir(logDir)
 	if err != nil {
@@ -220,12 +225,21 @@ func newestLog(logDir string) (string, error) {
 		return "", err
 	}
 	var newest string
+	var newestModTime time.Time
 	for _, e := range entries {
 		if e.IsDir() || !strings.HasSuffix(e.Name(), ".log") {
 			continue
 		}
-		if e.Name() > newest {
+		info, err := e.Info()
+		if err != nil {
+			continue
+		}
+		modTime := info.ModTime()
+		if modTime.After(newestModTime) ||
+			(modTime.Equal(newestModTime) && e.Name() > newest) {
+
 			newest = e.Name()
+			newestModTime = modTime
 		}
 	}
 	if newest == "" {
