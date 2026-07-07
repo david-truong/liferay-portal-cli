@@ -209,6 +209,39 @@ func TestWritePortalExtWhitelistsSlotHost(t *testing.T) {
 	}
 }
 
+// TestWritePortalExtPreservesModeAndIsAtomic guards MED-6a: portal-ext.properties
+// is owned by the user (it's their bundle config, only a managed block inside
+// it belongs to liferay-cli), so a rewrite must preserve the file's existing
+// mode and never leave a stray temp file behind — a torn write here would
+// destroy the user's own lines that writePortalExt re-emits from its read.
+func TestWritePortalExtPreservesModeAndIsAtomic(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "portal-ext.properties")
+	if err := os.WriteFile(path, []byte("company.default.locale=en_US\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := writePortalExt(dir, EngineMySQL, PortsFromSlot(0)); err != nil {
+		t.Fatalf("writePortalExt: %v", err)
+	}
+
+	info, err := os.Stat(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if info.Mode().Perm() != 0600 {
+		t.Errorf("mode = %v, want existing file's mode 0600 preserved", info.Mode().Perm())
+	}
+
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) != 1 || entries[0].Name() != "portal-ext.properties" {
+		t.Errorf("directory should contain only portal-ext.properties, got %v", entries)
+	}
+}
+
 func TestWritePortalExtStockOmitsSlotHost(t *testing.T) {
 	dir := t.TempDir()
 	if err := writePortalExt(dir, EngineMySQL, PortsFromSlot(0)); err != nil {

@@ -165,13 +165,19 @@ func readHostsFile() string {
 	return string(data)
 }
 
-// writeHostsFile replaces /etc/hosts content, preserving the existing file mode.
+// writeHostsFile replaces /etc/hosts content.
 func writeHostsFile(content string) error {
-	mode := os.FileMode(0644)
-	if info, err := os.Stat(hosts.Path); err == nil {
-		mode = info.Mode().Perm()
-	}
-	return os.WriteFile(hosts.Path, []byte(content), mode)
+	return writeHostsFileAt(hosts.Path, content)
+}
+
+// writeHostsFileAt atomically replaces path's content, preserving the
+// existing file's mode. Split out from writeHostsFile so tests can exercise
+// the write logic against a temp file instead of the real /etc/hosts. A
+// torn write to /etc/hosts breaks name resolution system-wide, so this goes
+// through state.WriteFileAtomic (temp file + rename) rather than
+// os.WriteFile.
+func writeHostsFileAt(path, content string) error {
+	return state.WriteFileAtomic(path, []byte(content), 0644)
 }
 
 func printSudoHint(msg string) {

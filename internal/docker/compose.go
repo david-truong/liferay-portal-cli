@@ -642,7 +642,9 @@ func writePortalExt(bundleDir, engine string, ports Ports) error {
 	sb.WriteString(configurationOverrides)
 	sb.WriteString(managedBlockEnd + ".\n")
 
-	return os.WriteFile(path, []byte(sb.String()), 0644)
+	// Atomic: this rewrite re-emits the user's own lines it just read above,
+	// so a crash mid-write must never leave portal-ext.properties truncated.
+	return state.WriteFileAtomic(path, []byte(sb.String()), 0644)
 }
 
 // CheckAvailable reports whether the docker CLI is on PATH and its daemon is
