@@ -663,16 +663,16 @@ func CheckAvailable() error {
 func checkDocker() error {
 	if _, err := exec.LookPath("docker"); err != nil {
 		return fmt.Errorf(
-			"docker not found on PATH\n\n"+
+			"%w: not found on PATH\n\n"+
 				"Install Docker:\n"+
 				"  macOS/Windows: https://www.docker.com/products/docker-desktop\n"+
-				"  Linux: https://docs.docker.com/engine/install/\n%w", ErrUnavailable)
+				"  Linux: https://docs.docker.com/engine/install/", ErrUnavailable)
 	}
 	cmd := exec.Command("docker", "info")
 	cmd.Stdout = nil
 	cmd.Stderr = nil
 	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("docker is not running — start Docker Desktop (or the Docker daemon) and try again\n%w", ErrUnavailable)
+		return fmt.Errorf("%w: the daemon is not running — start Docker Desktop (or the Docker daemon) and try again", ErrUnavailable)
 	}
 	return nil
 }
