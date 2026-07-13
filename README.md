@@ -315,7 +315,7 @@ Slot is persisted in `~/.liferay-cli/worktrees/<id>/docker/ports.json`. Docker s
 | Tomcat HTTP          | 8080           | +N × 10              |
 | Tomcat shutdown      | 8005           | +N × 10              |
 | Tomcat redirectPort  | 8443           | +N × 10              |
-| JPDA debug           | 8000           | +N × 10              |
+| JPDA debug           | 8000           | 20000 + N × 10       |
 | OSGi console / Gogo  | 11311          | +N × 10              |
 | Elasticsearch HTTP   | 9200           | +N × 101             |
 | Elasticsearch xport  | 9300           | +N × 101             |
@@ -325,7 +325,7 @@ Slot is persisted in `~/.liferay-cli/worktrees/<id>/docker/ports.json`. Docker s
 | DB (MySQL/MariaDB/PG)| 3306           | +N × 10              |
 | Adminer              | 8081           | +N × 10              |
 
-ES uses `+N × 101` instead of `+N × 10` so HTTP and transport ranges don't collide across slots.
+ES uses `+N × 101` instead of `+N × 10` so HTTP and transport ranges don't collide across slots. JPDA uses a dedicated `20000` base for slot > 0 instead of offsetting from 8000, since 8000 is only 80 (an exact multiple of the +10 offset) below Tomcat HTTP's 8080 — offsetting both from their stock bases would make slot N's JPDA port alias slot (N-8)'s Tomcat HTTP port.
 
 **What the patcher touches when slot > 0**
 

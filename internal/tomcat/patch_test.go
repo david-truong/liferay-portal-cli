@@ -103,8 +103,8 @@ func TestPatchSetenvSh_NoExistingLine(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(string(got), "export JPDA_ADDRESS=8010") {
-		t.Errorf("expected appended JPDA_ADDRESS=8010, got:\n%s", got)
+	if !strings.Contains(string(got), "export JPDA_ADDRESS=20010") {
+		t.Errorf("expected appended JPDA_ADDRESS=20010, got:\n%s", got)
 	}
 	if !strings.Contains(string(got), original) {
 		t.Errorf("expected original content preserved, got:\n%s", got)
@@ -126,8 +126,8 @@ func TestPatchSetenvSh_SingleExistingLine(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(string(got), "export JPDA_ADDRESS=8010") {
-		t.Errorf("expected JPDA_ADDRESS=8010, got:\n%s", got)
+	if !strings.Contains(string(got), "export JPDA_ADDRESS=20010") {
+		t.Errorf("expected JPDA_ADDRESS=20010, got:\n%s", got)
 	}
 	if strings.Contains(string(got), "export JPDA_ADDRESS=8000") {
 		t.Errorf("old JPDA_ADDRESS=8000 should be gone, got:\n%s", got)
@@ -178,8 +178,8 @@ func TestPatchSetenvSh_NoTrailingNewline(t *testing.T) {
 	if !strings.HasSuffix(string(got), "\n") {
 		t.Errorf("expected trailing newline, got: %q", got)
 	}
-	if !strings.Contains(string(got), "export JPDA_ADDRESS=8010") {
-		t.Errorf("expected JPDA_ADDRESS=8010 appended, got:\n%s", got)
+	if !strings.Contains(string(got), "export JPDA_ADDRESS=20010") {
+		t.Errorf("expected JPDA_ADDRESS=20010 appended, got:\n%s", got)
 	}
 }
 

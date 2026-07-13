@@ -52,6 +52,14 @@ const (
 	esOffsetPerSlot = 101
 	// offsetPerSlot is the uniform offset applied to every other service.
 	offsetPerSlot = 10
+
+	// jpdaSlotBase is the JPDA debug port base for slot > 0. baseJPDA (8000)
+	// is only 80 away from baseTomcatHTTP (8080) — an exact multiple of
+	// offsetPerSlot — so slot N's JPDA port would otherwise alias slot
+	// (N-8)'s Tomcat HTTP port. jpdaSlotBase sits in the gap between the
+	// Elasticsearch sidecar range and Arquillian, clear of every other
+	// slot-scaled port.
+	jpdaSlotBase = 20000
 )
 
 // AllocatePorts probes slots 0..99 in order and returns the first one whose
@@ -86,7 +94,7 @@ func slotPorts(slot int) Ports {
 		TomcatHTTP:     baseTomcatHTTP + slot*offsetPerSlot,
 		TomcatShutdown: baseTomcatShutdown + slot*offsetPerSlot,
 		TomcatRedirect: baseTomcatRedirect + slot*offsetPerSlot,
-		JPDA:           baseJPDA + slot*offsetPerSlot,
+		JPDA:           jpdaPort(slot),
 		OSGiConsole:    baseOSGiConsole + slot*offsetPerSlot,
 		ESHTTP:         baseESHTTP + slot*esOffsetPerSlot,
 		ESTransport:    baseESTransport + slot*esOffsetPerSlot,
@@ -96,6 +104,16 @@ func slotPorts(slot int) Ports {
 		MySQL:          baseMySQL + slot*offsetPerSlot,
 		Adminer:        baseAdminer + slot*offsetPerSlot,
 	}
+}
+
+// jpdaPort returns the JPDA debug port for slot. Slot 0 is never patched (see
+// PatchBundle), so it keeps baseJPDA — Tomcat's real default when
+// JPDA_ADDRESS is unset.
+func jpdaPort(slot int) int {
+	if slot == 0 {
+		return baseJPDA
+	}
+	return jpdaSlotBase + slot*offsetPerSlot
 }
 
 // ProbePorts returns every port AllocatePorts should probe for conflicts.

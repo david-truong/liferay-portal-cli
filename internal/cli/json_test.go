@@ -40,12 +40,12 @@ func TestServerStatusJSON_Schema(t *testing.T) {
 	if !got.Alive {
 		t.Error("alive = false, want true")
 	}
-	// Slot 5: TomcatHTTP = 8080 + 5*10 = 8130; JPDA = 8000 + 5*10 = 8050.
+	// Slot 5: TomcatHTTP = 8080 + 5*10 = 8130; JPDA = 20000 + 5*10 = 20050.
 	if got.Port != 8130 {
 		t.Errorf("port = %d, want 8130", got.Port)
 	}
-	if got.JPDAPort != 8050 {
-		t.Errorf("jpda_port = %d, want 8050", got.JPDAPort)
+	if got.JPDAPort != 20050 {
+		t.Errorf("jpda_port = %d, want 20050", got.JPDAPort)
 	}
 	if got.BundleDir != "/path/to/bundle" {
 		t.Errorf("bundle_dir = %q, want /path/to/bundle", got.BundleDir)

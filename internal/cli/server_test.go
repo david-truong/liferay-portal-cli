@@ -44,13 +44,13 @@ func TestServerStatusText_Running(t *testing.T) {
 	}
 
 	got := buf.String()
-	// Slot 5: TomcatHTTP = 8080 + 5*10 = 8130; JPDA = 8000 + 5*10 = 8050.
+	// Slot 5: TomcatHTTP = 8080 + 5*10 = 8130; JPDA = 20000 + 5*10 = 20050.
 	wants := []string{
 		"running\n",
 		"  pid:    12345\n",
 		"  slot:   5\n",
 		"  port:   8130\n",
-		"  jpda:   8050\n",
+		"  jpda:   20050\n",
 		"  bundle: /path/to/bundle\n",
 	}
 	for _, want := range wants {

@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"net"
 	"testing"
+
+	"github.com/david-truong/liferay-portal-cli/internal/hosts"
 )
 
 func TestSlot0IsStock(t *testing.T) {
@@ -80,6 +82,25 @@ func TestAnyPortInUseDetectsWildcardBind(t *testing.T) {
 
 	if !AnyPortInUse(port) {
 		t.Errorf("port %d has a wildcard listener and should be reported in use", port)
+	}
+}
+
+// TestNoPortCollisionsAcrossSlots proves every probed port is unique across
+// the slot pool (the only range with a precreated hostname, and therefore the
+// only range a worktree is actually expected to run in). A base port that is
+// a multiple of offsetPerSlot away from another base (e.g. baseJPDA=8000 vs
+// baseTomcatHTTP=8080, 80 apart) makes the two ports alias at some slot
+// distance — here 8, so slot N's JPDA port equals slot (N-8)'s Tomcat HTTP
+// port whenever both run at once.
+func TestNoPortCollisionsAcrossSlots(t *testing.T) {
+	seen := make(map[int]int)
+	for slot := 0; slot < hosts.SlotPoolSize; slot++ {
+		for _, port := range ProbePorts(slotPorts(slot)) {
+			if otherSlot, ok := seen[port]; ok {
+				t.Fatalf("port %d used by both slot %d and slot %d", port, otherSlot, slot)
+			}
+			seen[port] = slot
+		}
 	}
 }
 
