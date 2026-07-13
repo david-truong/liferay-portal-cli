@@ -215,6 +215,27 @@ func TestAutofixWorktree_NoOpForPrimary(t *testing.T) {
 	}
 }
 
+// TestAutofixWorktree_RegeneratesSetupWizardForStandaloneWorkspace proves the
+// bug this guards against: a Workspace project used as its own primary
+// checkout (never a linked git worktree, e.g. a solo project like
+// liferay-seo-studio) still needs "server wipe"'s deleted setup wizard file
+// regenerated. Workspace has no "stock, slot 0" exemption the way a Monorepo
+// primary does, so its wizard file is always fair game for wipe to delete.
+func TestAutofixWorktree_RegeneratesSetupWizardForStandaloneWorkspace(t *testing.T) {
+	root := t.TempDir()
+	if err := os.Mkdir(filepath.Join(root, ".git"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	writeWorkspaceMarker(t, root)
+
+	autofixWorktree(root)
+
+	wizardPath := filepath.Join(root, "bundles", "portal-setup-wizard.properties")
+	if _, err := os.Stat(wizardPath); err != nil {
+		t.Errorf("setup wizard not generated for standalone Workspace checkout: %v", err)
+	}
+}
+
 func TestEnsureWorktreeFiles_WorkspaceSkipsAppServerProperties(t *testing.T) {
 	primary, worktree := stageWorktreePair(t)
 	mustWriteCLI(t, filepath.Join(primary, "CLAUDE.md"), []byte("# claude\n"))
