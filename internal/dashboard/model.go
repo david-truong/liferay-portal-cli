@@ -191,16 +191,21 @@ func actionCmd(selfExe string, index int, w Worktree, verb string) tea.Cmd {
 	}
 
 	return func() tea.Msg {
+		// Every command in the sequence runs regardless of an earlier one's
+		// failure — "stop" pairs an independent server stop with a db stop,
+		// and a Tomcat that is already down (e.g. a Workspace worktree whose
+		// Tomcat isn't managed through this CLI) must not skip stopping the
+		// database.
+		var errs []error
 		for _, args := range commands {
 			out, err := exec.Command(selfExe, append([]string{"-C", w.Path}, args...)...).CombinedOutput()
 			if err != nil {
-				return actionDoneMsg{
-					index: index,
-					verb:  verb,
-					err: fmt.Errorf("%s: %v\n%s",
-						strings.Join(args, " "), err, lastLines(string(out), 3)),
-				}
+				errs = append(errs, fmt.Errorf("%s: %v\n%s",
+					strings.Join(args, " "), err, lastLines(string(out), 3)))
 			}
+		}
+		if len(errs) > 0 {
+			return actionDoneMsg{index: index, verb: verb, err: errors.Join(errs...)}
 		}
 		return actionDoneMsg{index: index, verb: verb}
 	}

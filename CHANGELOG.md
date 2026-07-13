@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed — `dashboard`
+
+- Pressing `x` (stop) on a worktree no longer skips `db stop` when `server
+  stop` fails. Previously the two commands ran as a fail-fast chain, so a
+  worktree whose Tomcat wasn't running (e.g. a Liferay Workspace project not
+  managed through `liferay server`) reported a "tomcat is not running" error
+  and left its database container running.
+
 ## [v1.4.0] - 2026-07-07
 
 ### Fixed — `worktree remove`

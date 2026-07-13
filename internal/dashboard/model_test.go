@@ -3,6 +3,7 @@ package dashboard
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 	"runtime"
 	"strings"
 	"testing"
@@ -194,6 +195,74 @@ func TestResetSequence(t *testing.T) {
 		}
 	}
 	os.Remove(run.logPath)
+}
+
+// TestStopRunsDbStopEvenWhenServerStopFails guards against a regression where
+// "server stop" failing (e.g. a Workspace worktree whose Tomcat isn't running
+// or isn't managed by this CLI) skipped "db stop" entirely, leaving the
+// database running.
+func TestStopRunsDbStopEvenWhenServerStopFails(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("stubs SelfExe with a shell script, which doesn't run on Windows")
+	}
+	callLog := filepath.Join(t.TempDir(), "calls.log")
+	script := writeStubExe(t, `#!/bin/sh
+echo "$@" >> "`+callLog+`"
+case "$*" in
+*"server stop"*) echo "tomcat is not running" >&2; exit 1 ;;
+*) exit 0 ;;
+esac
+`)
+
+	m := testModel()
+	m.cfg.SelfExe = script
+	m.active = 1
+
+	next, cmd := m.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'x'}})
+	m = next.(model)
+	if m.action[1] != "stop" {
+		t.Fatalf("action[1] = %q, want stop", m.action[1])
+	}
+
+	msg, ok := cmd().(actionDoneMsg)
+	if !ok {
+		t.Fatalf("expected an actionDoneMsg, got %T", cmd())
+	}
+	if msg.err == nil {
+		t.Fatal("expected the server-stop failure to surface as an error")
+	}
+	if !strings.Contains(msg.err.Error(), "tomcat is not running") {
+		t.Errorf("err = %v, want it to mention the server stop failure", msg.err)
+	}
+
+	calls, err := os.ReadFile(callLog)
+	if err != nil {
+		t.Fatalf("reading call log: %v", err)
+	}
+	if !strings.Contains(string(calls), "db stop") {
+		t.Errorf("db stop was never invoked despite the server stop failure; calls:\n%s", calls)
+	}
+}
+
+// writeStubExe writes an executable shell script to a temp file and returns
+// its path.
+func writeStubExe(t *testing.T, content string) string {
+	t.Helper()
+	f, err := os.CreateTemp("", "liferay-dashboard-stub-*.sh")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.WriteString(content); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(f.Name(), 0755); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { os.Remove(f.Name()) })
+	return f.Name()
 }
 
 func TestEscCancelsPromptOnly(t *testing.T) {
