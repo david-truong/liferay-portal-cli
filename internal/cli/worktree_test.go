@@ -233,13 +233,52 @@ func TestEnsureWorktreeFiles_WorkspaceSkipsAppServerProperties(t *testing.T) {
 	}
 }
 
-func TestEnsureWorktreeFiles_WorkspaceSkipsSetupWizard(t *testing.T) {
+// TestEnsureWorktreeFiles_GeneratesSetupWizardForWorkspace proves the setup
+// wizard file lands at a Workspace's actual bundle dir ("bundles", per
+// portal.BundleDir) rather than the Monorepo-only ".bundles" — writing to the
+// wrong path would make the file invisible to both Tomcat and "server wipe".
+func TestEnsureWorktreeFiles_GeneratesSetupWizardForWorkspace(t *testing.T) {
 	primary, worktree := stageWorktreePair(t)
+	writeWorkspaceMarker(t, worktree)
 
 	results := ensureWorktreeFiles(primary, worktree, portal.Workspace)
 
-	want := filepath.Join(".bundles", "portal-setup-wizard.properties")
-	if _, ok := resultByName(results)[want]; ok {
-		t.Error("portal-setup-wizard.properties should not be generated for a Workspace")
+	want := filepath.Join("bundles", "portal-setup-wizard.properties")
+	r, ok := resultByName(results)[want]
+	if !ok {
+		t.Fatalf("%s not in results: %+v", want, results)
+	}
+	if r.action != "generated" {
+		t.Errorf("action = %q, want generated", r.action)
+	}
+	if _, err := os.Stat(filepath.Join(worktree, want)); err != nil {
+		t.Errorf("setup wizard not written to workspace bundle dir: %v", err)
+	}
+}
+
+// TestEnsureWorktreeFiles_RegeneratesSetupWizardForWorkspaceAfterWipe proves
+// the autofix pass restores a Workspace's setup wizard file after "server
+// wipe" deletes it — the bug this test guards against: autofix used to skip
+// setup-wizard generation for every non-Monorepo project, so a Workspace
+// worktree's file never came back on the next liferay invocation.
+func TestEnsureWorktreeFiles_RegeneratesSetupWizardForWorkspaceAfterWipe(t *testing.T) {
+	primary, worktree := stageWorktreePair(t)
+	writeWorkspaceMarker(t, worktree)
+	ensureWorktreeFiles(primary, worktree, portal.Workspace)
+
+	wizardPath := filepath.Join(worktree, "bundles", "portal-setup-wizard.properties")
+	if err := os.Remove(wizardPath); err != nil {
+		t.Fatal(err)
+	}
+
+	results := ensureWorktreeFiles(primary, worktree, portal.Workspace)
+
+	want := filepath.Join("bundles", "portal-setup-wizard.properties")
+	r, ok := resultByName(results)[want]
+	if !ok || r.action != "generated" {
+		t.Errorf("expected setup wizard regenerated after wipe, got %+v", r)
+	}
+	if _, err := os.Stat(wizardPath); err != nil {
+		t.Errorf("setup wizard missing after autofix pass: %v", err)
 	}
 }

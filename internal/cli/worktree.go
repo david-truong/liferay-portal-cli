@@ -282,32 +282,53 @@ func ensureWorktreeFiles(primaryRoot, worktreeRoot string, projectType portal.Pr
 		results = append(results, copyIfMissing(".env", envSrc, filepath.Join(worktreeRoot, ".env")))
 	}
 
-	if projectType != portal.Monorepo {
+	if projectType == portal.ProjectTypeUnknown {
 		return results
 	}
 
-	username, err := portal.SafeUsername()
-	if err != nil {
-		return []fixAction{{name: "current-user", action: "failed", note: err.Error()}}
-	}
+	if projectType == portal.Monorepo {
+		username, err := portal.SafeUsername()
+		if err != nil {
+			return append(results, fixAction{"current-user", "failed", err.Error()})
+		}
 
-	// app.server.<user>.properties
-	appServerFile := fmt.Sprintf("app.server.%s.properties", username)
-	appServerDst := filepath.Join(worktreeRoot, appServerFile)
-	if fsutil.Exists(appServerDst) {
-		results = append(results, fixAction{appServerFile, "skipped", "already exists — worktree will use existing server config"})
-	} else {
-		content := "app.server.parent.dir=${project.dir}/" + bundleSubdirName + "\n"
-		if err := os.WriteFile(appServerDst, []byte(content), 0644); err != nil {
-			results = append(results, fixAction{appServerFile, "failed", err.Error()})
+		// app.server.<user>.properties
+		appServerFile := fmt.Sprintf("app.server.%s.properties", username)
+		appServerDst := filepath.Join(worktreeRoot, appServerFile)
+		if fsutil.Exists(appServerDst) {
+			results = append(results, fixAction{appServerFile, "skipped", "already exists — worktree will use existing server config"})
 		} else {
-			results = append(results, fixAction{appServerFile, "generated", bundleSubdirName + "/ will be inside this worktree"})
+			content := "app.server.parent.dir=${project.dir}/" + bundleSubdirName + "\n"
+			if err := os.WriteFile(appServerDst, []byte(content), 0644); err != nil {
+				results = append(results, fixAction{appServerFile, "failed", err.Error()})
+			} else {
+				results = append(results, fixAction{appServerFile, "generated", bundleSubdirName + "/ will be inside this worktree"})
+			}
 		}
 	}
 
-	// <bundle>/portal-setup-wizard.properties
-	setupWizardRel := filepath.Join(bundleSubdirName, "portal-setup-wizard.properties")
-	setupWizardDst := filepath.Join(worktreeRoot, setupWizardRel)
+	// <bundle>/portal-setup-wizard.properties. A Workspace's bundle lives
+	// wherever gradle.properties' liferay.workspace.home.dir points (default
+	// "bundles"), not the Monorepo's ".bundles" — resolve it the same way
+	// "server wipe" does so the file this autofix regenerates matches the one
+	// that command deletes.
+	bundleRel := bundleSubdirName
+	bundleDir := filepath.Join(worktreeRoot, bundleSubdirName)
+	if projectType == portal.Workspace {
+		dir, err := portal.BundleDir(worktreeRoot)
+		if err != nil {
+			return append(results, fixAction{"portal-setup-wizard.properties", "failed", err.Error()})
+		}
+		bundleDir = dir
+		if rel, err := filepath.Rel(worktreeRoot, dir); err == nil {
+			bundleRel = rel
+		} else {
+			bundleRel = dir
+		}
+	}
+
+	setupWizardRel := filepath.Join(bundleRel, "portal-setup-wizard.properties")
+	setupWizardDst := filepath.Join(bundleDir, "portal-setup-wizard.properties")
 	if fsutil.Exists(setupWizardDst) {
 		results = append(results, fixAction{setupWizardRel, "skipped", "already exists"})
 	} else if err := os.MkdirAll(filepath.Dir(setupWizardDst), 0755); err != nil {
@@ -319,7 +340,7 @@ func ensureWorktreeFiles(primaryRoot, worktreeRoot string, projectType portal.Pr
 			"company.default.time.zone=UTC\n" +
 			"company.default.web.id=liferay.com\n" +
 			"default.admin.email.address.prefix=test\n" +
-			"liferay.home=" + filepath.Join(worktreeRoot, bundleSubdirName) + "\n" +
+			"liferay.home=" + bundleDir + "\n" +
 			"setup.wizard.enabled=false\n"
 		if err := os.WriteFile(setupWizardDst, []byte(content), 0644); err != nil {
 			results = append(results, fixAction{setupWizardRel, "failed", err.Error()})
