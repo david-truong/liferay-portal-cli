@@ -391,21 +391,32 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 		return m, openCmd(m.adminerURL(w))
 
-	case "s", "x", "r":
+	case "s", "r":
 		if m.action[m.active] != "" {
 			return m, nil
 		}
-		verb := map[string]string{"s": "start", "x": "stop", "r": "restart"}[msg.String()]
+		verb := map[string]string{"s": "start", "r": "restart"}[msg.String()]
 		m.action[m.active] = verb
 		m.note[m.active] = ""
-		if verb != "stop" {
-			m = m.applyBranchFlags(w)
-		}
+		m = m.applyBranchFlags(w)
 		return m, actionCmd(m.cfg.SelfExe, m.active, w, verb)
 
-	case "w":
+	case "ctrl+x":
+		// Stop destroys the database (container data is not persisted), so
+		// it requires ctrl+x rather than a bare key to guard against
+		// accidental data loss.
+		if m.action[m.active] != "" {
+			return m, nil
+		}
+		m.action[m.active] = "stop"
+		m.note[m.active] = ""
+		return m, actionCmd(m.cfg.SelfExe, m.active, w, "stop")
+
+	case "ctrl+w":
 		// Full reset: wipe bundle state, bounce the DB stack (container
 		// data is not persisted, so this yields a fresh database), boot.
+		// Requires ctrl+w rather than a bare key to guard against
+		// accidental data loss.
 		if m.action[m.active] != "" {
 			return m, nil
 		}
@@ -836,7 +847,7 @@ func (m model) viewFooter() string {
 			tabLabel(m.cfg.Worktrees[m.active]))), m.width)
 	}
 	return softWrap(dimStyle.Render(
-		"←/→ tabs · o open · ctrl+o adminer · s start · x stop · r restart · w reset · ctrl+d delete · : run · l logs · u refresh · q quit"),
+		"←/→ tabs · o open · ctrl+o adminer · s start · ctrl+x stop · r restart · ctrl+w reset · ctrl+d delete · : run · l logs · u refresh · q quit"),
 		m.width)
 }
 

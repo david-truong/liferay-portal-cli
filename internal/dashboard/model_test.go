@@ -168,7 +168,7 @@ func TestResetSequence(t *testing.T) {
 	m.cfg.SelfExe = "/bin/echo"
 	m.active = 1
 
-	next, cmd := m.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'w'}})
+	next, cmd := m.handleKey(tea.KeyMsg{Type: tea.KeyCtrlW})
 	m = next.(model)
 
 	run := m.runs[1]
@@ -218,7 +218,7 @@ esac
 	m.cfg.SelfExe = script
 	m.active = 1
 
-	next, cmd := m.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'x'}})
+	next, cmd := m.handleKey(tea.KeyMsg{Type: tea.KeyCtrlX})
 	m = next.(model)
 	if m.action[1] != "stop" {
 		t.Fatalf("action[1] = %q, want stop", m.action[1])
