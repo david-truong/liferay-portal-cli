@@ -11,6 +11,7 @@ import (
 	"github.com/david-truong/liferay-portal-cli/internal/gradle"
 	"github.com/david-truong/liferay-portal-cli/internal/logrun"
 	"github.com/david-truong/liferay-portal-cli/internal/portal"
+	"github.com/david-truong/liferay-portal-cli/internal/state"
 	"github.com/spf13/cobra"
 )
 
@@ -73,6 +74,8 @@ func runBuild(cmd *cobra.Command, args []string) error {
 		}
 		return runAntAll(portalRoot)
 	}
+
+	warnIfRebased(portalRoot)
 
 	idx, err := buildModuleIndex(portalRoot)
 	if err != nil {
@@ -151,7 +154,39 @@ func runAntDeploy(portalRoot, projectDir string) error {
 }
 
 func runAntAll(portalRoot string) error {
-	return runAnt(portalRoot, portalRoot, "all", "build-all")
+	if err := runAnt(portalRoot, portalRoot, "all", "build-all"); err != nil {
+		return err
+	}
+	if sha := mergeBaseSHA(portalRoot); sha != "" {
+		_ = state.SaveBuildBase(portalRoot, sha)
+	}
+	return nil
+}
+
+// mergeBaseSHA returns the merge-base between HEAD and master, or "" if it
+// can't be determined (no master ref, detached HEAD, ...).
+func mergeBaseSHA(portalRoot string) string {
+	out, err := gitOutput("-C", portalRoot, "merge-base", "master", "HEAD")
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(out)
+}
+
+// warnIfRebased prints a warning when portalRoot's branch has moved onto a
+// new base since its last "ant all", so changes from master picked up by a
+// rebase aren't silently missing from modules deployed individually.
+func warnIfRebased(portalRoot string) {
+	rec, ok, err := state.LoadBuildBase(portalRoot)
+	if err != nil || !ok {
+		return
+	}
+	current := mergeBaseSHA(portalRoot)
+	if current == "" || current == rec.SHA {
+		return
+	}
+	fmt.Fprintln(os.Stderr,
+		"warning: branch has moved onto a new base since the last \"ant all\" — run \"liferay build\" with no arguments to rebuild")
 }
 
 func lookupAnt() (string, error) {
