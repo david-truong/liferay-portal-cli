@@ -102,6 +102,15 @@ The root-level Ant projects (`portal-impl`, `portal-kernel`, `util-bridges`, `ut
 liferay build portal-impl
 ```
 
+**Rebase detection.** Every successful `ant all` (bare `liferay build`, or the auto-build in `liferay worktree add`) records the merge-base between `HEAD` and `master` in `~/.liferay-cli/worktrees/<id>/build_base.json`, alongside the slot state in `docker/ports.json`. If you later deploy specific modules and that merge-base has moved — i.e. the branch was rebased onto a newer `master` since the last full build — `liferay build <module ...>` prints a warning:
+
+```sh
+$ liferay build change-tracking-web
+warning: branch has moved onto a new base since the last "ant all" — run "liferay build" with no arguments to rebuild
+```
+
+This only warns; it never blocks the deploy. Run `liferay build` with no arguments to pick up whatever changed upstream and clear the warning.
+
 ### `liferay client-extension`
 
 Build, deploy, and run a workspace client extension. Names resolve against every
