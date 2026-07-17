@@ -357,6 +357,40 @@ func TestRefreshDropsVanishedTab(t *testing.T) {
 	}
 }
 
+func TestStaleCmdDoneMsgAfterTabRemoved(t *testing.T) {
+	m := testModel()
+	m.runs = []runState{{}, {line: "build", running: true}}
+
+	// LPD-1's worktree vanishes while its command is still running, so its
+	// tab is dropped before the command reports back.
+	m.mergeWorktrees([]Worktree{
+		{Path: "/w/master", Branch: "master", Slot: 0, Primary: true},
+	})
+
+	next, _ := m.Update(cmdDoneMsg{index: 1})
+	m = next.(model)
+
+	if len(m.runs) != 1 {
+		t.Fatalf("runs length = %d, want 1", len(m.runs))
+	}
+}
+
+func TestStaleActionDoneMsgAfterTabRemoved(t *testing.T) {
+	m := testModel()
+	m.action = []string{"", "stop"}
+
+	m.mergeWorktrees([]Worktree{
+		{Path: "/w/master", Branch: "master", Slot: 0, Primary: true},
+	})
+
+	next, _ := m.Update(actionDoneMsg{index: 1, verb: "stop"})
+	m = next.(model)
+
+	if len(m.action) != 1 {
+		t.Fatalf("action length = %d, want 1", len(m.action))
+	}
+}
+
 func TestRefreshWithoutReloadHook(t *testing.T) {
 	m := testModel()
 
