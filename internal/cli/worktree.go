@@ -32,7 +32,7 @@ var worktreeCmd = &cobra.Command{
 }
 
 var worktreeAddCmd = &cobra.Command{
-	Use:   "add <branch> <path>",
+	Use:   "add <branch> [path]",
 	Short: "Create a new worktree and propagate user-local files",
 	Long: `Creates a git worktree and propagates files that git ignores but are
 required for Liferay development:
@@ -48,10 +48,12 @@ required for Liferay development:
     app.server.<user>.properties              — points .bundles/ inside the worktree
     .bundles/portal-setup-wizard.properties   — skips setup wizard on first boot
 
+When path is omitted, it defaults to "../<branch>".
+
 By default, runs "ant all" after creating the worktree to populate the bundle
 directory. Pass --skip-build to skip this step (you'll need to run
 "liferay build" manually before "liferay server up").`,
-	Args: cobra.ExactArgs(2),
+	Args: cobra.RangeArgs(1, 2),
 	RunE: runWorktreeAdd,
 }
 
@@ -187,7 +189,11 @@ func init() {
 }
 
 func runWorktreeAdd(cmd *cobra.Command, args []string) error {
-	branch, targetPath := args[0], args[1]
+	branch := args[0]
+	targetPath := filepath.Join("..", branch)
+	if len(args) == 2 {
+		targetPath = args[1]
+	}
 
 	absTarget, err := filepath.Abs(targetPath)
 	if err != nil {
