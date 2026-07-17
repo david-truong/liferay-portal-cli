@@ -75,6 +75,20 @@ func mustGitForceBranch(t *testing.T, dir, branch, ref string) {
 	}
 }
 
+// mustGitRebase rebases the current branch onto ref. Needs a committer
+// identity to replay commits, which CI runners don't have configured
+// globally, so it sets one explicitly rather than relying on host git config.
+func mustGitRebase(t *testing.T, dir, ref string) {
+	t.Helper()
+	cmd := exec.Command("git", "-C", dir, "rebase", ref)
+	cmd.Env = append(os.Environ(),
+		"GIT_AUTHOR_NAME=test", "GIT_AUTHOR_EMAIL=test@test.com",
+		"GIT_COMMITTER_NAME=test", "GIT_COMMITTER_EMAIL=test@test.com")
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("git rebase %s: %v\n%s", ref, err, out)
+	}
+}
+
 // captureStderr redirects os.Stderr for the duration of fn and returns
 // whatever was written to it.
 func captureStderr(t *testing.T, fn func()) string {
@@ -191,9 +205,7 @@ func TestWarnIfRebased_WarnsAfterRebaseOntoNewMaster(t *testing.T) {
 		t.Fatalf("git branch -D temp: %v\n%s", err, out)
 	}
 
-	if out, err := exec.Command("git", "-C", root, "rebase", "master").CombinedOutput(); err != nil {
-		t.Fatalf("git rebase master: %v\n%s", err, out)
-	}
+	mustGitRebase(t, root, "master")
 
 	out := captureStderr(t, func() { warnIfRebased(root) })
 	if !bytes.Contains([]byte(out), []byte(`branch has moved onto a new base`)) {
