@@ -128,6 +128,7 @@ func runWorkspaceBuildAll(portalRoot string) error {
 			return fmt.Errorf("deploying %s: %w", filepath.Base(modulePath), err)
 		}
 	}
+	recordBuildBase(portalRoot)
 	return nil
 }
 
@@ -157,10 +158,17 @@ func runAntAll(portalRoot string) error {
 	if err := runAnt(portalRoot, portalRoot, "all", "build-all"); err != nil {
 		return err
 	}
+	recordBuildBase(portalRoot)
+	return nil
+}
+
+// recordBuildBase persists the current merge-base as the base portalRoot was
+// last fully built against, so a later rebase can be detected by
+// warnIfRebased. A no-op when the merge-base can't be determined.
+func recordBuildBase(portalRoot string) {
 	if sha := mergeBaseSHA(portalRoot); sha != "" {
 		_ = state.SaveBuildBase(portalRoot, sha)
 	}
-	return nil
 }
 
 // mergeBaseSHA returns the merge-base between HEAD and master, or "" if it
