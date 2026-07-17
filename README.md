@@ -246,7 +246,13 @@ liferay test-integration change-tracking-web --tests "com.liferay.foo.FooTest"
 Create a worktree with user-local files pre-propagated:
 
 ```sh
-liferay worktree add LPD-99999 ../LPD-99999
+liferay worktree add LPD-99999
+```
+
+The path defaults to `../LPD-99999`; pass one explicitly to override it:
+
+```sh
+liferay worktree add LPD-99999 ../some-other-dir
 ```
 
 This runs `git worktree add`, then:
