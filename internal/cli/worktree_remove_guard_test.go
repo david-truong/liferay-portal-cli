@@ -84,6 +84,30 @@ func TestRemoveWorktree_RemovesRegisteredLinkedWorktree(t *testing.T) {
 	}
 }
 
+// TestStopFsmonitorDaemon_StopsRunningDaemon is the regression test for the
+// fsmonitor daemon leak: the built-in daemon has no idle timeout, so
+// removeWorktree must stop it before deleting the directory it watches, or
+// it lingers indefinitely.
+func TestStopFsmonitorDaemon_StopsRunningDaemon(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git not on PATH")
+	}
+	t.Setenv("HOME", t.TempDir())
+
+	repoDir := t.TempDir()
+	runGit(t, repoDir, "init")
+	runGit(t, repoDir, "fsmonitor--daemon", "start")
+	t.Cleanup(func() {
+		_ = exec.Command("git", "-C", repoDir, "fsmonitor--daemon", "stop").Run()
+	})
+
+	stopFsmonitorDaemon(repoDir)
+
+	if exec.Command("git", "-C", repoDir, "fsmonitor--daemon", "status").Run() == nil {
+		t.Error("fsmonitor daemon should have been stopped")
+	}
+}
+
 // runGit runs git with args in dir, failing the test on error.
 func runGit(t *testing.T, dir string, args ...string) {
 	t.Helper()

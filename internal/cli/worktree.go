@@ -436,6 +436,11 @@ func removeWorktree(absTarget string, assumeYes bool, in io.Reader, out io.Write
 	dockerState, hasSlot := docker.LoadState(absTarget)
 	stopSlotRuntime(stateDir, absTarget, dockerState.Slot, hasSlot)
 
+	// The built-in fsmonitor daemon has no idle timeout — it only exits via
+	// an explicit "stop" — so deleting the directory out from under it would
+	// orphan it permanently.
+	stopFsmonitorDaemon(absTarget)
+
 	// Delete the worktree directory outright rather than asking git to empty
 	// it. "git worktree remove" refuses while the tree is dirty (the deployed
 	// .bundles/ and build outputs always leave it so — the "Directory not
@@ -532,6 +537,18 @@ func stopSlotRuntime(stateDirRoot, worktreePath string, slot int, hasSlot bool) 
 		if err := docker.StopStack(filepath.Join(stateDirRoot, "docker"), slot); err != nil {
 			fmt.Printf("  warning: could not stop Docker stack: %v\n", err)
 		}
+	}
+}
+
+// stopFsmonitorDaemon stops the fsmonitor daemon watching dir, if one is
+// running. Absent is the common case (core.fsmonitor off, or the daemon
+// never started), so it's checked first rather than treated as a warning.
+func stopFsmonitorDaemon(dir string) {
+	if _, err := gitOutput("-C", dir, "fsmonitor--daemon", "status"); err != nil {
+		return
+	}
+	if err := gitRun("-C", dir, "fsmonitor--daemon", "stop"); err != nil {
+		fmt.Printf("  warning: could not stop fsmonitor daemon: %v\n", err)
 	}
 }
 
