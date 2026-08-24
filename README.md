@@ -66,6 +66,7 @@ Run `liferay completion <shell> --help` for fish/PowerShell and persistent-insta
 | `liferay playwright --tests <filter>` | Run Playwright e2e tests from `modules/test/playwright` |
 | `liferay test <module> --tests <filter>` | Run unit tests in a module (`gw test --tests`) |
 | `liferay test-integration <module> --tests <filter>` | Run integration tests in a module (`gw testIntegration --tests`) |
+| `liferay review [base-branch]` | Review the current branch's diff against Brian Chan's code-review rules |
 | `liferay worktree <add\|list\|remove>` | Create and manage git worktrees |
 | `liferay db <up\|down\|logs\|ps\|restart> [--engine mysql\|mariadb\|postgres\|hypersonic]` | Manage the per-worktree database stack |
 | `liferay server <start\|stop\|restart\|run\|status\|logs\|wipe>` | Manage the host-native Tomcat bundle |
@@ -177,6 +178,28 @@ Format source for the entire branch or for specific modules:
 liferay sf                     # ant format-source-current-branch from portal-impl
 liferay sf change-tracking-web # gw formatSource in that module
 ```
+
+### `liferay review`
+
+Diffs `HEAD` against `base-branch` (default `master`) and reviews it against Brian
+Chan's code-review rules via the `brian-review` skill, printing the same
+`{"chance", "violations"}` verdict `poll-prs.sh` posts to PRs:
+
+```sh
+liferay review                # review HEAD against master, using Sonnet
+liferay review origin/master  # review against a different base
+```
+
+By default the review runs on Sonnet (`claude --agent pr-review-monitor`). Set
+`BRIAN_REVIEW_ENGINE=local` to run it against a local Ollama model instead
+(`LOCAL_REVIEW_MODEL`, `LOCAL_REVIEW_OLLAMA_HOST` choose which one and where):
+
+```sh
+BRIAN_REVIEW_ENGINE=local LOCAL_REVIEW_MODEL=qwen3-coder:30b liferay review
+```
+
+See `~/.claude/skills/brian-review/test-fixtures/README.md` for testing a candidate
+local model's recall before switching to it here.
 
 ### `liferay gw`
 
