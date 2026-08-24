@@ -182,24 +182,28 @@ liferay sf change-tracking-web # gw formatSource in that module
 ### `liferay review`
 
 Diffs `HEAD` against `base-branch` (default `master`) and reviews it against Brian
-Chan's code-review rules via the `brian-review` skill, printing the same
-`{"chance", "violations"}` verdict `poll-prs.sh` posts to PRs:
+Chan's code-review rules, printing the same `{"chance", "violations"}` verdict
+`poll-prs.sh` posts to PRs:
 
 ```sh
-liferay review                # review HEAD against master, using Sonnet
+liferay review                # review HEAD against master
 liferay review origin/master  # review against a different base
 ```
 
-By default the review runs on Sonnet (`claude --agent pr-review-monitor`). Set
-`BRIAN_REVIEW_ENGINE=local` to run it against a local Ollama model instead
-(`LOCAL_REVIEW_MODEL`, `LOCAL_REVIEW_OLLAMA_HOST` choose which one and where):
+Fully standalone: the rule corpus (`internal/review/references`) is vendored and
+embedded in the binary, and review runs entirely against a local Ollama model — no
+Claude Code, no Python, no network dependency beyond Ollama itself. Requires an
+Ollama server running with a model pulled (`ollama pull qwen3-coder:30b`, the
+default). `LOCAL_REVIEW_MODEL` and `LOCAL_REVIEW_OLLAMA_HOST` choose a different
+model or host:
 
 ```sh
-BRIAN_REVIEW_ENGINE=local LOCAL_REVIEW_MODEL=qwen3-coder:30b liferay review
+LOCAL_REVIEW_MODEL=qwen2.5-coder:32b liferay review
 ```
 
-See `~/.claude/skills/brian-review/test-fixtures/README.md` for testing a candidate
-local model's recall before switching to it here.
+`internal/review/testdata/failures.diff` is a fixture with 5 known planted
+violations, used by `go test ./internal/review/...` to check a candidate model's
+recall before adopting it as the default.
 
 ### `liferay gw`
 

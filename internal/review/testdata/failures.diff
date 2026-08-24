@@ -1,0 +1,42 @@
+diff --git a/modules/apps/foo/foo-service/src/main/java/com/liferay/foo/service/impl/FooLocalServiceImpl.java b/modules/apps/foo/foo-service/src/main/java/com/liferay/foo/service/impl/FooLocalServiceImpl.java
+index 1111111..2222222 100644
+--- a/modules/apps/foo/foo-service/src/main/java/com/liferay/foo/service/impl/FooLocalServiceImpl.java
++++ b/modules/apps/foo/foo-service/src/main/java/com/liferay/foo/service/impl/FooLocalServiceImpl.java
+@@ -10,6 +10,50 @@ public class FooLocalServiceImpl extends FooLocalServiceBaseImpl {
+ 
++	public String getStatusLabel(int status) {
++		switch (status) {
++			case 0:
++				return "Draft";
++			case 1:
++				return "Approved";
++			default:
++				return "Unknown";
++		}
++	}
++
++	public boolean checkUrl(String url) {
++		return url.equals("") ? true : false;
++	}
++
++	public String buildFullName(String first, String middle, String last, String suffix) {
++		return first + " " + middle + " " + last + " " + suffix;
++	}
++
++	public Foo saveFoo(Foo foo) {
++		if (foo.getCompany() != null && foo.getCompany().getGroup() != null) {
++			foo.getCompany().getGroup().setActive(true);
++		}
++
++		return fooPersistence.update(foo);
++	}
++
++	public String formatDate(Date date) {
++		return date.toString();
++	}
++
++	public String getFormattedDate(Date date) {
++		return formatDate(date);
++	}
++
+ }
