@@ -12,6 +12,11 @@ import (
 	"github.com/spf13/cobra"
 )
 
+var (
+	reviewModel string
+	reviewHost  string
+)
+
 var reviewCmd = &cobra.Command{
 	Use:   "review [base-branch]",
 	Short: "Review the current branch's diff against Brian Chan's code-review rules",
@@ -22,18 +27,21 @@ printing the same {"chance", "violations"} verdict poll-prs.sh posts to PRs.
 Standalone: no Claude Code, no Python, nothing beyond a running local Ollama
 server with a model pulled.
 
-LOCAL_REVIEW_MODEL and LOCAL_REVIEW_OLLAMA_HOST choose which model and where
-to reach it, for testing a candidate model's recall before adopting it.
+--model and --host choose which model and where to reach it, for testing a
+candidate model's recall before adopting it (LOCAL_REVIEW_MODEL,
+LOCAL_REVIEW_OLLAMA_HOST set the same via environment instead).
 
 Examples:
   liferay review
   liferay review origin/master
-  LOCAL_REVIEW_MODEL=qwen2.5-coder:32b liferay review`,
+  liferay review --model qwen2.5-coder:32b`,
 	Args: cobra.MaximumNArgs(1),
 	RunE: runReview,
 }
 
 func init() {
+	reviewCmd.Flags().StringVar(&reviewModel, "model", reviewEnv("LOCAL_REVIEW_MODEL", "qwen3-coder:30b"), "Ollama model to review with")
+	reviewCmd.Flags().StringVar(&reviewHost, "host", reviewEnv("LOCAL_REVIEW_OLLAMA_HOST", "http://localhost:11434"), "Ollama server URL")
 	rootCmd.AddCommand(reviewCmd)
 }
 
@@ -58,8 +66,8 @@ func runReview(cmd *cobra.Command, args []string) error {
 	}
 
 	cfg := review.Config{
-		Host:         reviewEnv("LOCAL_REVIEW_OLLAMA_HOST", "http://localhost:11434"),
-		Model:        reviewEnv("LOCAL_REVIEW_MODEL", "qwen3-coder:30b"),
+		Host:         reviewHost,
+		Model:        reviewModel,
 		CheckoutDir:  portalRoot,
 		MaxToolIters: 4,
 		Timeout:      120 * time.Second,

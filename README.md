@@ -194,11 +194,12 @@ Fully standalone: the rule corpus (`internal/review/references`) is vendored and
 embedded in the binary, and review runs entirely against a local Ollama model — no
 Claude Code, no Python, no network dependency beyond Ollama itself. Requires an
 Ollama server running with a model pulled (`ollama pull qwen3-coder:30b`, the
-default). `LOCAL_REVIEW_MODEL` and `LOCAL_REVIEW_OLLAMA_HOST` choose a different
-model or host:
+default). `--model`/`--host` (or `LOCAL_REVIEW_MODEL`/`LOCAL_REVIEW_OLLAMA_HOST`)
+choose a different model or host:
 
 ```sh
-LOCAL_REVIEW_MODEL=qwen2.5-coder:32b liferay review
+liferay review --model qwen2.5-coder:32b
+LOCAL_REVIEW_MODEL=qwen2.5-coder:32b liferay review   # equivalent via environment
 ```
 
 `internal/review/testdata/failures.diff` is a fixture with 5 known planted
