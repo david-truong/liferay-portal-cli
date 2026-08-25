@@ -210,6 +210,13 @@ hardware or a bigger model — raise it if you see "context deadline exceeded":
 liferay review --timeout 10m
 ```
 
+Progress (including a `[timer] ... elapsed` line every 30s, plus a final total)
+prints to stderr, keeping stdout as pure `{"chance", "violations"}` JSON:
+
+```sh
+liferay review 2> review.log   # capture progress separately from the verdict
+```
+
 `internal/review/testdata/failures.diff` is a fixture with 5 known planted
 violations, used by `go test ./internal/review/...` to check a candidate model's
 recall before adopting it as the default.

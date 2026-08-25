@@ -79,7 +79,12 @@ func runReview(cmd *cobra.Command, args []string) error {
 		Timeout:      reviewTimeout,
 	}
 
+	start := time.Now()
+	stopTicker := startElapsedTicker(start)
 	result, err := review.Run(context.Background(), cfg, diff)
+	stopTicker()
+	fmt.Fprintf(os.Stderr, "[timer] review finished in %s\n", time.Since(start).Round(time.Second))
+
 	if err != nil {
 		return err
 	}
@@ -90,6 +95,28 @@ func runReview(cmd *cobra.Command, args []string) error {
 	}
 	fmt.Println(string(out))
 	return nil
+}
+
+// startElapsedTicker prints an elapsed-time line to stderr every 30s so a
+// long-running review (they've taken anywhere from a few minutes to over an
+// hour) doesn't read as stalled. Returns a func to stop it.
+func startElapsedTicker(start time.Time) func() {
+	done := make(chan struct{})
+	ticker := time.NewTicker(30 * time.Second)
+
+	go func() {
+		defer ticker.Stop()
+		for {
+			select {
+			case <-done:
+				return
+			case <-ticker.C:
+				fmt.Fprintf(os.Stderr, "[timer] %s elapsed\n", time.Since(start).Round(time.Second))
+			}
+		}
+	}()
+
+	return func() { close(done) }
 }
 
 func reviewEnv(key, fallback string) string {
