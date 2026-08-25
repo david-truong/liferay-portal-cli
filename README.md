@@ -202,7 +202,7 @@ liferay review --model qwen2.5-coder:32b
 LOCAL_REVIEW_MODEL=qwen2.5-coder:32b liferay review   # equivalent via environment
 ```
 
-`--timeout` (default `5m`) bounds each individual Ollama call. A large bundled
+`--timeout` (default `30m`) bounds each individual Ollama call. A large bundled
 dimension can legitimately take a couple of minutes to prompt-eval on slower
 hardware or a bigger model — raise it if you see "context deadline exceeded":
 

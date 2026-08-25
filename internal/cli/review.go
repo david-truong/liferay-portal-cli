@@ -47,7 +47,7 @@ Examples:
 func init() {
 	reviewCmd.Flags().StringVar(&reviewModel, "model", reviewEnv("LOCAL_REVIEW_MODEL", "qwen3-coder:30b"), "Ollama model to review with")
 	reviewCmd.Flags().StringVar(&reviewHost, "host", reviewEnv("LOCAL_REVIEW_OLLAMA_HOST", "http://localhost:11434"), "Ollama server URL")
-	reviewCmd.Flags().DurationVar(&reviewTimeout, "timeout", 5*time.Minute, "Timeout for each individual Ollama call")
+	reviewCmd.Flags().DurationVar(&reviewTimeout, "timeout", 30*time.Minute, "Timeout for each individual Ollama call")
 	rootCmd.AddCommand(reviewCmd)
 }
 
