@@ -13,8 +13,9 @@ import (
 )
 
 var (
-	reviewModel string
-	reviewHost  string
+	reviewModel   string
+	reviewHost    string
+	reviewTimeout time.Duration
 )
 
 var reviewCmd = &cobra.Command{
@@ -29,12 +30,16 @@ server with a model pulled.
 
 --model and --host choose which model and where to reach it, for testing a
 candidate model's recall before adopting it (LOCAL_REVIEW_MODEL,
-LOCAL_REVIEW_OLLAMA_HOST set the same via environment instead).
+LOCAL_REVIEW_OLLAMA_HOST set the same via environment instead). --timeout
+bounds each individual Ollama call — a large bundled dimension can
+legitimately take a couple of minutes to prompt-eval on slower hardware or
+a bigger model; raise it if you see "context deadline exceeded".
 
 Examples:
   liferay review
   liferay review origin/master
-  liferay review --model qwen2.5-coder:32b`,
+  liferay review --model qwen2.5-coder:32b
+  liferay review --timeout 10m`,
 	Args: cobra.MaximumNArgs(1),
 	RunE: runReview,
 }
@@ -42,6 +47,7 @@ Examples:
 func init() {
 	reviewCmd.Flags().StringVar(&reviewModel, "model", reviewEnv("LOCAL_REVIEW_MODEL", "qwen3-coder:30b"), "Ollama model to review with")
 	reviewCmd.Flags().StringVar(&reviewHost, "host", reviewEnv("LOCAL_REVIEW_OLLAMA_HOST", "http://localhost:11434"), "Ollama server URL")
+	reviewCmd.Flags().DurationVar(&reviewTimeout, "timeout", 5*time.Minute, "Timeout for each individual Ollama call")
 	rootCmd.AddCommand(reviewCmd)
 }
 
@@ -70,7 +76,7 @@ func runReview(cmd *cobra.Command, args []string) error {
 		Model:        reviewModel,
 		CheckoutDir:  portalRoot,
 		MaxToolIters: 4,
-		Timeout:      120 * time.Second,
+		Timeout:      reviewTimeout,
 	}
 
 	result, err := review.Run(context.Background(), cfg, diff)
