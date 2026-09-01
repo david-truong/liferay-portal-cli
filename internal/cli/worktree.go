@@ -50,6 +50,9 @@ required for Liferay development:
 
 When path is omitted, it defaults to "../<branch>".
 
+When <branch> doesn't exist yet (locally or on origin), it's created from
+master.
+
 By default, runs "ant all" after creating the worktree to populate the bundle
 directory. Pass --skip-build to skip this step (you'll need to run
 "liferay build" manually before "liferay server up").`,
@@ -206,8 +209,14 @@ func runWorktreeAdd(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	// Create the worktree
-	if err := gitRun("worktree", "add", absTarget, branch); err != nil {
+	// Create the worktree, branching off master when <branch> doesn't
+	// already exist locally or as an origin tracking branch.
+	worktreeAddArgs := []string{"worktree", "add", absTarget, branch}
+	if !refExists("refs/heads/"+branch) && !refExists("refs/remotes/origin/"+branch) {
+		fmt.Printf("Branch %q doesn't exist yet, creating it from master\n", branch)
+		worktreeAddArgs = []string{"worktree", "add", "-b", branch, absTarget, "master"}
+	}
+	if err := gitRun(worktreeAddArgs...); err != nil {
 		return err
 	}
 
@@ -693,6 +702,13 @@ func gitRun(args ...string) error {
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	return cmd.Run()
+}
+
+// refExists reports whether ref resolves to a valid object in the current
+// repository.
+func refExists(ref string) bool {
+	cmd := exec.Command("git", "show-ref", "--verify", "--quiet", ref)
+	return cmd.Run() == nil
 }
 
 func collectSymlinkTargets(root string) []string {
