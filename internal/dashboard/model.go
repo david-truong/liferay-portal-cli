@@ -97,6 +97,14 @@ type model struct {
 	logSrc   []int
 	logView  viewport.Model
 
+	// logClearedAt/logClearedPath implement the drawer's "clear" key: the
+	// byte offset into logClearedPath below which lines are hidden. A path
+	// mismatch (source switched, or a new command opened a fresh temp log)
+	// means the clear no longer applies, so it's ignored rather than reset
+	// everywhere the tailed file can change.
+	logClearedAt   []int64
+	logClearedPath []string
+
 	inputMode bool
 	cmdInput  textinput.Model
 
@@ -130,6 +138,9 @@ func newModel(cfg Config) model {
 		logSrc:   make([]int, len(cfg.Worktrees)),
 		showLogs: true,
 		cmdInput: cmdInput,
+
+		logClearedAt:   make([]int64, len(cfg.Worktrees)),
+		logClearedPath: make([]string, len(cfg.Worktrees)),
 	}
 }
 
@@ -227,9 +238,9 @@ func deleteCmd(selfExe, runDir, targetPath string, index int, branch string) tea
 	}
 }
 
-func logCmd(index int, catOut string) tea.Cmd {
+func logCmd(index int, catOut string, offset int64) tea.Cmd {
 	return func() tea.Msg {
-		content, err := tailFile(catOut)
+		content, err := tailFile(catOut, offset)
 		return logMsg{index: index, content: content, err: err}
 	}
 }
@@ -483,6 +494,21 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 
+	case "c":
+		if !m.showLogs {
+			return m, nil
+		}
+		path := m.currentLogPath()
+		if path == "" {
+			return m, nil
+		}
+		if info, err := os.Stat(path); err == nil {
+			m.logClearedPath[m.active] = path
+			m.logClearedAt[m.active] = info.Size()
+		}
+		m.logView.SetContent("")
+		return m, m.tailNow()
+
 	case "u":
 		cmds := []tea.Cmd{probeCmd(m.cfg.Worktrees)}
 		if reload := reloadCmd(m.cfg.Reload); reload != nil {
@@ -583,6 +609,8 @@ func (m *model) removeTab(i int) {
 	m.note = append(m.note[:i], m.note[i+1:]...)
 	m.runs = append(m.runs[:i], m.runs[i+1:]...)
 	m.logSrc = append(m.logSrc[:i], m.logSrc[i+1:]...)
+	m.logClearedAt = append(m.logClearedAt[:i], m.logClearedAt[i+1:]...)
+	m.logClearedPath = append(m.logClearedPath[:i], m.logClearedPath[i+1:]...)
 
 	if m.active >= len(m.cfg.Worktrees) {
 		m.active = len(m.cfg.Worktrees) - 1
@@ -623,7 +651,7 @@ func (m model) startSequence(line string, argSets [][]string) (tea.Model, tea.Cm
 
 	seq := seqCmd(index, m.cfg.SelfExe, m.cfg.Worktrees[index].Path, argSets, logFile)
 
-	return m, tea.Batch(seq, logCmd(index, logFile.Name()))
+	return m, tea.Batch(seq, logCmd(index, logFile.Name(), 0))
 }
 
 // seqCmd runs each invocation in order, stopping at the first failure. The
@@ -677,12 +705,14 @@ func (m *model) mergeWorktrees(fresh []Worktree) {
 	}
 
 	var (
-		worktrees []Worktree
-		statuses  []Status
-		action    []string
-		note      []string
-		runs      []runState
-		logSrc    []int
+		worktrees      []Worktree
+		statuses       []Status
+		action         []string
+		note           []string
+		runs           []runState
+		logSrc         []int
+		logClearedAt   []int64
+		logClearedPath []string
 	)
 	for i, w := range m.cfg.Worktrees {
 		updated, ok := byPath[w.Path]
@@ -699,6 +729,8 @@ func (m *model) mergeWorktrees(fresh []Worktree) {
 		note = append(note, m.note[i])
 		runs = append(runs, m.runs[i])
 		logSrc = append(logSrc, m.logSrc[i])
+		logClearedAt = append(logClearedAt, m.logClearedAt[i])
+		logClearedPath = append(logClearedPath, m.logClearedPath[i])
 	}
 
 	// Never blank the UI; the primary worktree should always survive.
@@ -712,6 +744,8 @@ func (m *model) mergeWorktrees(fresh []Worktree) {
 	m.note = note
 	m.runs = runs
 	m.logSrc = logSrc
+	m.logClearedAt = logClearedAt
+	m.logClearedPath = logClearedPath
 
 	m.active = 0
 	for i, w := range worktrees {
@@ -722,19 +756,35 @@ func (m *model) mergeWorktrees(fresh []Worktree) {
 	}
 }
 
+// currentLogPath returns the file backing the drawer's current source for
+// the active tab, or "" if that source has no file yet.
+func (m model) currentLogPath() string {
+	if m.logSrc[m.active] == srcCommand && m.runs[m.active].logPath != "" {
+		return m.runs[m.active].logPath
+	}
+	return m.statuses[m.active].CatOut
+}
+
+// clearOffset returns the byte offset the "clear" key set for path, or 0 if
+// it was never cleared or was cleared against a different file.
+func (m model) clearOffset(path string) int64 {
+	if path == "" || m.logClearedPath[m.active] != path {
+		return 0
+	}
+	return m.logClearedAt[m.active]
+}
+
 // tailNow returns the refresh command for the drawer's current source, or
 // nil when the drawer is closed or the source has no file yet.
 func (m model) tailNow() tea.Cmd {
 	if !m.showLogs {
 		return nil
 	}
-	if m.logSrc[m.active] == srcCommand && m.runs[m.active].logPath != "" {
-		return logCmd(m.active, m.runs[m.active].logPath)
+	path := m.currentLogPath()
+	if path == "" {
+		return nil
 	}
-	if catOut := m.statuses[m.active].CatOut; catOut != "" {
-		return logCmd(m.active, catOut)
-	}
-	return nil
+	return logCmd(m.active, path, m.clearOffset(path))
 }
 
 // portalURL prefers the slot-pool hostname so virtual-instance cookies and
@@ -858,7 +908,7 @@ func (m model) viewFooter() string {
 			tabLabel(m.cfg.Worktrees[m.active]))), m.width)
 	}
 	return softWrap(dimStyle.Render(
-		"←/→ tabs · o open · ctrl+o adminer · s start · ctrl+x stop · r restart · ctrl+w reset · ctrl+d delete · : run · l logs · u refresh · q quit"),
+		"←/→ tabs · o open · ctrl+o adminer · s start · ctrl+x stop · r restart · ctrl+w reset · ctrl+d delete · : run · l logs · c clear · u refresh · q quit"),
 		m.width)
 }
 

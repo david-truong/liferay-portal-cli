@@ -143,6 +143,66 @@ func TestCommandPrompt(t *testing.T) {
 	os.Remove(run.logPath)
 }
 
+// TestClearLogsHidesEarlierContent verifies the "c" key: content already in
+// the drawer's file is hidden, but content appended afterward still shows.
+func TestClearLogsHidesEarlierContent(t *testing.T) {
+	logFile, err := os.CreateTemp("", "liferay-dashboard-test-*.log")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.Remove(logFile.Name())
+	if _, err := logFile.WriteString("old output\n"); err != nil {
+		t.Fatal(err)
+	}
+	logFile.Close()
+
+	m := testModel()
+	m.active = 1
+	m.showLogs = true
+	m.logSrc[1] = srcCommand
+	m.runs[1] = runState{line: "build foo-web", logPath: logFile.Name()}
+
+	next, cmd := m.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'c'}})
+	m = next.(model)
+	if cmd == nil {
+		t.Fatal("'c' did not return a refresh command")
+	}
+
+	msg, ok := cmd().(logMsg)
+	if !ok {
+		t.Fatalf("expected a logMsg, got %T", cmd())
+	}
+	if msg.content != "" {
+		t.Errorf("content right after clear = %q, want empty", msg.content)
+	}
+	next, _ = m.Update(msg)
+	m = next.(model)
+	if got := m.logView.View(); strings.Contains(got, "old output") {
+		t.Errorf("drawer still shows pre-clear content:\n%s", got)
+	}
+
+	f, err := os.OpenFile(logFile.Name(), os.O_APPEND|os.O_WRONLY, 0644)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.WriteString("new output\n"); err != nil {
+		t.Fatal(err)
+	}
+	f.Close()
+
+	tail := m.tailNow()
+	if tail == nil {
+		t.Fatal("tailNow returned nil after clear")
+	}
+	msg, ok = tail().(logMsg)
+	if !ok {
+		t.Fatalf("expected a logMsg, got %T", tail())
+	}
+	if msg.content != "new output\n" {
+		t.Errorf("content after append = %q, want only the post-clear line", msg.content)
+	}
+}
+
 // runBatch executes every command in a tea.Batch result and returns the
 // cmdDoneMsg it produces.
 func runBatch(t *testing.T, cmd tea.Cmd) cmdDoneMsg {
