@@ -144,9 +144,30 @@ func Stop(paths Paths) error {
 // is live and, when ps is available to check, its command line references
 // paths.Bundle — the same PID-reuse guard ForceStop applies, since a live pid
 // alone doesn't prove it's still this Tomcat and not an unrelated process
-// that inherited the recycled PID. When ps is unavailable (e.g. Windows),
-// liveness alone is trusted.
+// that inherited the recycled PID. When the tracked pid isn't running, a
+// Tomcat for this exact bundle version may still be alive under a different
+// pid — started outside this CLI, or left over after CATALINA_PID and the
+// real JVM pid diverged — so orphanPID searches for it and, if found, its
+// pid is adopted into paths.PidFile so this and every later call (including
+// catalina.sh stop) target the real process instead of reporting a stale
+// pid forever. When ps is unavailable (e.g. Windows), liveness of the
+// tracked pid alone is trusted and no orphan search runs.
 func Status(paths Paths) (int, bool) {
+	pid, alive := trackedStatus(paths)
+	if alive {
+		return pid, true
+	}
+
+	if orphan, found := orphanPID(paths); found {
+		_ = os.WriteFile(paths.PidFile, []byte(strconv.Itoa(orphan)), 0644)
+		return orphan, true
+	}
+
+	return pid, false
+}
+
+// trackedStatus checks only the pid currently recorded in paths.PidFile.
+func trackedStatus(paths Paths) (int, bool) {
 	data, err := os.ReadFile(paths.PidFile)
 	if err != nil {
 		return 0, false
@@ -162,6 +183,40 @@ func Status(paths Paths) (int, bool) {
 		return pid, false
 	}
 	return pid, true
+}
+
+// orphanPID scans the process table for a live Tomcat bound to this exact
+// bundle version, identified by its -Dcatalina.base=<paths.Tomcat> flag —
+// a marker only the real Tomcat JVM carries, unlike sidecar processes that
+// merely reference paths under the same bundle. Unsupported on Windows,
+// where there is no single process-table listing command portable across
+// this codebase's other ps usage; callers then have no fallback and treat
+// the bundle as simply stopped.
+func orphanPID(paths Paths) (int, bool) {
+	if runtime.GOOS == "windows" || paths.Tomcat == "" {
+		return 0, false
+	}
+
+	marker := "-Dcatalina.base=" + paths.Tomcat
+
+	out, err := exec.Command("ps", "-eo", "pid=,command=").Output()
+	if err != nil {
+		return 0, false
+	}
+
+	for _, line := range strings.Split(string(out), "\n") {
+		line = strings.TrimSpace(line)
+		if !strings.Contains(line, marker) {
+			continue
+		}
+
+		fields := strings.SplitN(line, " ", 2)
+		if pid, err := strconv.Atoi(fields[0]); err == nil {
+			return pid, true
+		}
+	}
+
+	return 0, false
 }
 
 // Wipe removes the bundle subdirectories that hold derived state (data,
