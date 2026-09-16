@@ -15,6 +15,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   removes its worktree when the root has no tab of its own, and the
   confirmation names the worktree root.
 
+### Fixed — `server`
+
+- A Tomcat for the bundle that runs under a different pid than the tracked
+  one, because it was started outside the CLI or its pid diverged from
+  `CATALINA_PID`, is found by its `-Dcatalina.base` flag and its pid adopted,
+  instead of being reported as stale forever. Without `ps` (Windows), only
+  the tracked pid is checked.
+
 ## [v1.6.0] - 2026-10-14
 
 ### Added — `worktree add`
