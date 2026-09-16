@@ -70,7 +70,7 @@ Run `liferay completion <shell> --help` for fish/PowerShell and persistent-insta
 | `liferay worktree <add\|list\|remove>` | Create and manage git worktrees |
 | `liferay db <up\|down\|logs\|ps\|restart> [--engine mysql\|mariadb\|postgres\|hypersonic]` | Manage the per-worktree database stack |
 | `liferay server <start\|stop\|restart\|run\|status\|logs\|wipe>` | Manage the host-native Tomcat bundle |
-| `liferay omni-admin <install\|uninstall>` | Install/remove dev-only omni-admin bundles (auto-login, no-captcha, forgiving store) |
+| `liferay admin-tools <install\|uninstall>` | Install/remove dev-only admin bundles (auto-login, no-captcha, forgiving store, OAuth2 provisioning) |
 | `liferay hosts <add\|remove\|list>` | Manage a friendly `/etc/hosts` name for this worktree (maps to 127.0.0.1) |
 
 ---
@@ -422,20 +422,34 @@ Debug mode is opt-in so the JPDA port is only bound when you actually need it. `
 
 Integration tests rely on this host-native Tomcat — the Arquillian junit-bridge and DataGuard connectors both use loopback sockets, which cannot cross the Docker network boundary.
 
-### `liferay omni-admin`
+### `liferay admin-tools`
 
-Installs three dev-only OSGi bundles into the active bundle's `osgi/modules/`:
+Installs four dev-only OSGi bundles into the active bundle's `osgi/modules/`:
 
 - `omni.admin.autologin` — AutoLogin filter that authenticates requests as an administrator
 - `omni.admin.captcha` — no-op `CaptchaProvider` that disables CAPTCHA portal-wide
 - `omni.admin.store` — `DLStoreWrapper`/`PDFProcessorWrapper` that returns empty files for missing documents
+- `oauth2.admin` — exposes `POST /o/oauth2-admin/applications` (the OSGi HTTP
+  Whiteboard bridge only ever mounts under `/o/`, Liferay's reserved
+  `Portal.PATH_MODULE` prefix — anything else 404s through friendly-URL
+  resolution instead of reaching the servlet): given an `externalReferenceCode`
+  (and optional `clientId`/`clientSecret`/`name`/`scopeAliases`), it creates a
+  client-credentials OAuth2 application, or resets the `clientSecret`/`name` on
+  one that already exists. Scripts things that otherwise require the Script
+  console — e.g. resetting a client extension's randomly-generated OAuth2
+  secret to a known value.
 
 ```sh
-liferay omni-admin install     # copy all three jars into osgi/modules
-liferay omni-admin uninstall   # remove them
+liferay admin-tools install     # copy all four jars into osgi/modules
+liferay admin-tools uninstall   # remove them
+
+curl -X POST http://localhost:8080/o/oauth2-admin/applications \
+	-d '{"externalReferenceCode": "my-erc", "clientSecret": "myfancypassword"}'
 ```
 
-These bundles bypass authentication and validation. Never install on a shared or production bundle.
+These bundles bypass authentication, validation, and permission checks — the
+oauth2-admin endpoint in particular lets anyone who can reach the port mint or
+reset OAuth2 credentials. Never install on a shared or production bundle.
 
 ### `liferay hosts`
 
