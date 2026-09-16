@@ -90,6 +90,38 @@ func TestAdminToolsGuard_BundleInside_EnvVarConsent(t *testing.T) {
 	}
 }
 
+func TestIsJakartaBundle_Tomcat9_False(t *testing.T) {
+	root := t.TempDir()
+	props := "app.server.tomcat.version=9.0.78\n"
+	if err := os.WriteFile(filepath.Join(root, "app.server.properties"), []byte(props), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	if isJakartaBundle(root) {
+		t.Error("expected Tomcat 9 to resolve as javax, got jakarta")
+	}
+}
+
+func TestIsJakartaBundle_Tomcat10_True(t *testing.T) {
+	root := t.TempDir()
+	props := "app.server.tomcat.version=10.1.59\n"
+	if err := os.WriteFile(filepath.Join(root, "app.server.properties"), []byte(props), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	if !isJakartaBundle(root) {
+		t.Error("expected Tomcat 10 to resolve as jakarta")
+	}
+}
+
+func TestIsJakartaBundle_UnresolvableDefaultsFalse(t *testing.T) {
+	root := t.TempDir() // no app.server.properties
+
+	if isJakartaBundle(root) {
+		t.Error("expected an unresolvable bundle to default to javax")
+	}
+}
+
 func TestAdminToolsGuard_BundleErrorMessageIncludesOverrideHint(t *testing.T) {
 	t.Setenv("LIFERAY_CLI_ASSUME_YES", "")
 	workRoot := t.TempDir()

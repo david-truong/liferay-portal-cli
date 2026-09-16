@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	"github.com/david-truong/liferay-portal-cli/internal/portal"
@@ -15,7 +16,19 @@ import (
 //go:embed admintools/*.jar
 var adminToolsJars embed.FS
 
-const adminToolsJarDir = "admintools"
+// Servlet-API-coupled bundles need a namespace-matched build: Tomcat 10+ is
+// Jakarta EE 9+ (jakarta.servlet), everything before it is javax.servlet.
+// Only oauth2.admin has a Jakarta variant so far — omni.admin.autologin and
+// omni.admin.captcha also import javax.servlet/javax.portlet but aren't
+// ported yet, so they still fail to resolve on a Jakarta bundle.
+//
+//go:embed admintools/jakarta/*.jar
+var adminToolsJakartaJars embed.FS
+
+const (
+	adminToolsJarDir        = "admintools"
+	adminToolsJakartaJarDir = "admintools/jakarta"
+)
 
 var adminToolsCmd = &cobra.Command{
 	Use:   "admin-tools",
@@ -155,9 +168,21 @@ func runAdminToolsInstall(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("reading embedded jars: %w", err)
 	}
 
+	jakarta := isJakartaBundle(portalRoot)
+
 	for _, entry := range entries {
+		srcFS, srcPath := adminToolsJars, filepath.Join(adminToolsJarDir, entry.Name())
+		if jakarta {
+			if jakartaEntry, err := adminToolsJakartaJars.Open(
+				filepath.Join(adminToolsJakartaJarDir, entry.Name())); err == nil {
+
+				jakartaEntry.Close()
+				srcFS, srcPath = adminToolsJakartaJars, filepath.Join(adminToolsJakartaJarDir, entry.Name())
+			}
+		}
+
 		dstPath := filepath.Join(modulesDir, entry.Name())
-		if err := copyEmbeddedAdminToolsJar(entry.Name(), dstPath); err != nil {
+		if err := copyEmbeddedAdminToolsJar(srcFS, srcPath, dstPath); err != nil {
 			return err
 		}
 		fmt.Printf("installed %s\n", dstPath)
@@ -165,10 +190,30 @@ func runAdminToolsInstall(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-func copyEmbeddedAdminToolsJar(name, dstPath string) error {
-	src, err := adminToolsJars.Open(filepath.Join(adminToolsJarDir, name))
+// isJakartaBundle reports whether the resolved bundle's Tomcat is version
+// 10+ (Jakarta EE 9+, jakarta.servlet) rather than 8.5/9 (javax.servlet).
+// Any resolution failure defaults to false — the original javax jars, the
+// long-standing behavior.
+func isJakartaBundle(portalRoot string) bool {
+	tomcatDir, err := portal.FindTomcatDir(portalRoot)
 	if err != nil {
-		return fmt.Errorf("opening %s: %w", name, err)
+		return false
+	}
+
+	name := strings.TrimPrefix(filepath.Base(tomcatDir), "tomcat-")
+	major, _, _ := strings.Cut(name, ".")
+
+	version, err := strconv.Atoi(major)
+	if err != nil {
+		return false
+	}
+	return version >= 10
+}
+
+func copyEmbeddedAdminToolsJar(srcFS embed.FS, srcPath, dstPath string) error {
+	src, err := srcFS.Open(srcPath)
+	if err != nil {
+		return fmt.Errorf("opening %s: %w", srcPath, err)
 	}
 	defer src.Close()
 
