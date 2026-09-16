@@ -22,6 +22,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   create or reset a client-credentials OAuth2 application's secret without
   the Script console). Guard behavior (worktree-containment check, consent
   prompt) is unchanged from `omni-admin install`.
+- `oauth2.admin` now ships a Jakarta build alongside the original javax one;
+  `install` auto-picks it when the resolved bundle's Tomcat is version 10+
+  (Jakarta EE 9+, `jakarta.servlet`), fixing a bundle-resolution failure on
+  modern DXP bundles. `omni.admin.autologin`/`omni.admin.captcha` are still
+  javax-only.
 
 ### Fixed — `dashboard`
 

@@ -437,7 +437,13 @@ Installs four dev-only OSGi bundles into the active bundle's `osgi/modules/`:
   client-credentials OAuth2 application, or resets the `clientSecret`/`name` on
   one that already exists. Scripts things that otherwise require the Script
   console — e.g. resetting a client extension's randomly-generated OAuth2
-  secret to a known value.
+  secret to a known value. Ships in both a javax and a Jakarta build
+  (`oauth2.admin-1.0.0.jar`, source in `liferay-portal-workspace/modules/
+  oauth2-admin` and `oauth2-admin-jakarta`); `install` auto-picks the Jakarta
+  one when the resolved bundle's Tomcat is version 10+ (Jakarta EE 9+).
+  `omni.admin.autologin` and `omni.admin.captcha` are javax-only for now — on
+  a Jakarta bundle they'll still fail to resolve (harmless log noise) as long
+  as `oauth2.admin` starts.
 
 ```sh
 liferay admin-tools install     # copy all four jars into osgi/modules
