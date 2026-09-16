@@ -13,6 +13,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   (server log or command output) is hidden, but the drawer keeps tailing
   new lines as they arrive.
 
+### Added — `admin-tools`
+
+- New `liferay admin-tools install|uninstall` command, replacing `omni-admin`
+  and `oauth2-admin`. Installs four dev-only bundles in one shot:
+  `omni.admin.autologin`, `omni.admin.captcha`, `omni.admin.store`, and
+  `oauth2.admin` (a new bundle exposing `POST /o/oauth2-admin/applications` to
+  create or reset a client-credentials OAuth2 application's secret without
+  the Script console). Guard behavior (worktree-containment check, consent
+  prompt) is unchanged from `omni-admin install`.
+
 ### Fixed — `dashboard`
 
 - Pressing `x` (stop) on a worktree no longer skips `db stop` when `server

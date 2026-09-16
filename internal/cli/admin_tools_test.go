@@ -9,12 +9,12 @@ import (
 	"testing"
 )
 
-func TestOmniAdminGuard_BundleOutside_NoOverride(t *testing.T) {
+func TestAdminToolsGuard_BundleOutside_NoOverride(t *testing.T) {
 	t.Setenv("LIFERAY_CLI_ASSUME_YES", "")
 	workRoot := t.TempDir()
 	bundleDir := t.TempDir() // different temp dir, not under workRoot
 
-	err := omniAdminGuard(workRoot, bundleDir,
+	err := adminToolsGuard(workRoot, bundleDir,
 		false /* allowExternal */, true, /* assumeYes */
 		strings.NewReader(""), &bytes.Buffer{}, false)
 
@@ -24,12 +24,12 @@ func TestOmniAdminGuard_BundleOutside_NoOverride(t *testing.T) {
 	}
 }
 
-func TestOmniAdminGuard_BundleOutside_WithOverride_Consent(t *testing.T) {
+func TestAdminToolsGuard_BundleOutside_WithOverride_Consent(t *testing.T) {
 	t.Setenv("LIFERAY_CLI_ASSUME_YES", "")
 	workRoot := t.TempDir()
 	bundleDir := t.TempDir()
 
-	err := omniAdminGuard(workRoot, bundleDir,
+	err := adminToolsGuard(workRoot, bundleDir,
 		true /* allowExternal */, true, /* assumeYes */
 		strings.NewReader(""), &bytes.Buffer{}, false)
 
@@ -38,7 +38,7 @@ func TestOmniAdminGuard_BundleOutside_WithOverride_Consent(t *testing.T) {
 	}
 }
 
-func TestOmniAdminGuard_BundleInside_Consent(t *testing.T) {
+func TestAdminToolsGuard_BundleInside_Consent(t *testing.T) {
 	t.Setenv("LIFERAY_CLI_ASSUME_YES", "")
 	workRoot := t.TempDir()
 	bundleDir := filepath.Join(workRoot, "bundles")
@@ -46,7 +46,7 @@ func TestOmniAdminGuard_BundleInside_Consent(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	err := omniAdminGuard(workRoot, bundleDir,
+	err := adminToolsGuard(workRoot, bundleDir,
 		false /* allowExternal */, true, /* assumeYes */
 		strings.NewReader(""), &bytes.Buffer{}, false)
 
@@ -55,7 +55,7 @@ func TestOmniAdminGuard_BundleInside_Consent(t *testing.T) {
 	}
 }
 
-func TestOmniAdminGuard_BundleInside_NoConsent_NonTTY(t *testing.T) {
+func TestAdminToolsGuard_BundleInside_NoConsent_NonTTY(t *testing.T) {
 	t.Setenv("LIFERAY_CLI_ASSUME_YES", "")
 	workRoot := t.TempDir()
 	bundleDir := filepath.Join(workRoot, "bundles")
@@ -63,7 +63,7 @@ func TestOmniAdminGuard_BundleInside_NoConsent_NonTTY(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	err := omniAdminGuard(workRoot, bundleDir,
+	err := adminToolsGuard(workRoot, bundleDir,
 		false /* allowExternal */, false, /* assumeYes */
 		strings.NewReader(""), &bytes.Buffer{}, false /* isTTY */)
 
@@ -73,7 +73,7 @@ func TestOmniAdminGuard_BundleInside_NoConsent_NonTTY(t *testing.T) {
 	}
 }
 
-func TestOmniAdminGuard_BundleInside_EnvVarConsent(t *testing.T) {
+func TestAdminToolsGuard_BundleInside_EnvVarConsent(t *testing.T) {
 	t.Setenv("LIFERAY_CLI_ASSUME_YES", "1")
 	workRoot := t.TempDir()
 	bundleDir := filepath.Join(workRoot, "bundles")
@@ -81,7 +81,7 @@ func TestOmniAdminGuard_BundleInside_EnvVarConsent(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	err := omniAdminGuard(workRoot, bundleDir,
+	err := adminToolsGuard(workRoot, bundleDir,
 		false /* allowExternal */, false, /* assumeYes flag not set */
 		strings.NewReader(""), &bytes.Buffer{}, false)
 
@@ -90,12 +90,12 @@ func TestOmniAdminGuard_BundleInside_EnvVarConsent(t *testing.T) {
 	}
 }
 
-func TestOmniAdminGuard_BundleErrorMessageIncludesOverrideHint(t *testing.T) {
+func TestAdminToolsGuard_BundleErrorMessageIncludesOverrideHint(t *testing.T) {
 	t.Setenv("LIFERAY_CLI_ASSUME_YES", "")
 	workRoot := t.TempDir()
 	bundleDir := t.TempDir()
 
-	err := omniAdminGuard(workRoot, bundleDir,
+	err := adminToolsGuard(workRoot, bundleDir,
 		false, true,
 		strings.NewReader(""), &bytes.Buffer{}, false)
 
