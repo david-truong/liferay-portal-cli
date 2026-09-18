@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added — `dashboard`
+
+- `c` clears the log drawer: content already written to the current file
+  (server log or command output) is hidden, but the drawer keeps tailing
+  new lines as they arrive.
+
 ### Fixed — `dashboard`
 
 - Pressing `x` (stop) on a worktree no longer skips `db stop` when `server
