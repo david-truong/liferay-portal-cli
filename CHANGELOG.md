@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [v1.5.0] - 2026-09-22
+
 ### Added — `dashboard`
 
 - `c` clears the log drawer: content already written to the current file
@@ -27,6 +29,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   (Jakarta EE 9+, `jakarta.servlet`), fixing a bundle-resolution failure on
   modern DXP bundles. `omni.admin.autologin`/`omni.admin.captcha` are still
   javax-only.
+
+### Changed — `dashboard`
+
+- Stop and reset are now `ctrl+s`/`ctrl+r`, not `ctrl+x`/`ctrl+w`.
 
 ### Fixed — `dashboard`
 
