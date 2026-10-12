@@ -51,11 +51,14 @@ required for Liferay development:
 When path is omitted, it defaults to "../<branch>".
 
 When <branch> doesn't exist yet (locally or on origin), it's created from
-master.
+master — or, when the primary checkout is not a Liferay project root (such as
+liferay-portal-ee's sparse master-private checkout), from the primary
+checkout's current branch.
 
 By default, runs "ant all" after creating the worktree to populate the bundle
 directory. Pass --skip-build to skip this step (you'll need to run
-"liferay build" manually before "liferay server up").`,
+"liferay build" manually before "liferay server up"). A worktree that is not a
+Liferay project root gets the symlinks and copies only, and no build.`,
 	Args: cobra.RangeArgs(1, 2),
 	RunE: runWorktreeAdd,
 }
@@ -209,25 +212,30 @@ func runWorktreeAdd(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	// Create the worktree, branching off master when <branch> doesn't
+	// Create the worktree, branching off newBranchBase when <branch> doesn't
 	// already exist locally or as an origin tracking branch.
 	worktreeAddArgs := []string{"worktree", "add", absTarget, branch}
 	if !refExists("refs/heads/"+branch) && !refExists("refs/remotes/origin/"+branch) {
-		fmt.Printf("Branch %q doesn't exist yet, creating it from master\n", branch)
-		worktreeAddArgs = []string{"worktree", "add", "-b", branch, absTarget, "master"}
+		base := newBranchBase(primaryRoot)
+		fmt.Printf("Branch %q doesn't exist yet, creating it from %s\n", branch, base)
+		worktreeAddArgs = []string{"worktree", "add", "-b", branch, absTarget, base}
 	}
 	if err := gitRun(worktreeAddArgs...); err != nil {
 		return err
 	}
 
-	projectType := portal.DetectProjectType(primaryRoot)
-	if projectType == portal.ProjectTypeUnknown {
-		fmt.Printf("Worktree created at %s (not a Liferay project: skipping file propagation)\n", absTarget)
-		return nil
-	}
+	// Detect on the new worktree, not the primary: liferay-portal-ee's
+	// primary sits on the sparse master-private branch while a worktree
+	// created from master or a release branch is a full monorepo.
+	projectType := portal.DetectProjectType(absTarget)
 
 	if err := propagatePortalFiles(primaryRoot, absTarget, projectType); err != nil {
 		return err
+	}
+
+	if projectType == portal.ProjectTypeUnknown {
+		fmt.Println("\nNot a Liferay project root: skipping the build. Build a Liferay Workspace inside it with \"liferay -C <workspace> build\".")
+		return nil
 	}
 
 	if worktreeSkipBuild {
@@ -242,6 +250,25 @@ func runWorktreeAdd(cmd *cobra.Command, args []string) error {
 	}
 	fmt.Println("\nRunning liferay build (ant all) ...")
 	return runAntAll(absTarget)
+}
+
+// newBranchBase returns the ref a missing branch is created from: master, or
+// the primary checkout's current branch when the primary is not a Liferay
+// project root. liferay-portal-ee's sparse master-private branch shares no
+// history with master, so branching it from master would check out the whole
+// portal instead.
+func newBranchBase(primaryRoot string) string {
+	if portal.DetectProjectType(primaryRoot) != portal.ProjectTypeUnknown {
+		return "master"
+	}
+	out, err := gitOutput("-C", primaryRoot, "branch", "--show-current")
+	if err != nil {
+		return "master"
+	}
+	if branch := strings.TrimSpace(out); branch != "" {
+		return branch
+	}
+	return "master"
 }
 
 // fixAction records what ensureWorktreeFiles did (or didn't do) for one file.

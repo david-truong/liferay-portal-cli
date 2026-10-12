@@ -35,7 +35,7 @@ func autofixWorktree(portalRoot string) {
 		return
 	}
 
-	runAutofix(primaryRoot, portalRoot, portal.DetectProjectType(primaryRoot))
+	runAutofix(primaryRoot, portalRoot, portal.DetectProjectType(portalRoot))
 }
 
 func runAutofix(primaryRoot, worktreeRoot string, projectType portal.ProjectType) {
