@@ -322,6 +322,12 @@ By default this also runs `ant all` to populate the bundle. To skip the build an
 liferay worktree add LPD-99999 ../LPD-99999 --skip-build
 ```
 
+When another worktree was already built at the commit the new one starts from, `worktree add` seeds from it instead of running `ant all`: its bundle, Maven snapshots, and Gradle caches are cloned copy-on-write (macOS and Linux). To seed from a specific worktree (the normal build runs when it doesn't qualify):
+
+```sh
+liferay worktree add LPD-99999 ../LPD-99999 --seed-from ../LPD-88888
+```
+
 Other worktree commands:
 
 ```sh
