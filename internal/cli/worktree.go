@@ -185,7 +185,7 @@ var (
 )
 
 func init() {
-	worktreeAddCmd.Flags().BoolVar(&worktreeSkipBuild, "skip-build", false, "Skip running 'liferay build' (ant all) after creating the worktree")
+	worktreeAddCmd.Flags().BoolVar(&worktreeSkipBuild, "skip-build", false, "Skip running 'liferay build' (ant all) after creating the worktree; a monorepo worktree still runs 'ant setup-sdk' so Gradle commands work")
 	worktreeRemoveCmd.Flags().BoolVar(&worktreeRemoveYes, "yes", false, "Skip the confirmation prompt. Required when stdin is not a TTY (or set LIFERAY_CLI_ASSUME_YES=1).")
 	worktreeListCmd.Flags().BoolVar(&worktreeListJSON, "json", false, "Emit machine-readable JSON instead of git porcelain. Schema is stable: [{path, branch, slot, primary}].")
 	worktreePruneCmd.Flags().BoolVar(&worktreePruneYes, "yes", false, "Skip the confirmation prompt. Required when stdin is not a TTY (or set LIFERAY_CLI_ASSUME_YES=1).")
@@ -239,6 +239,15 @@ func runWorktreeAdd(cmd *cobra.Command, args []string) error {
 	}
 
 	if worktreeSkipBuild {
+		// "ant setup-sdk" is what installs the Gradle wrapper's distribution
+		// and the portal tools, without which every Gradle command fails at
+		// startup.
+		if projectType == portal.Monorepo {
+			fmt.Println("\nRunning ant setup-sdk ...")
+			if err := runAnt(absTarget, absTarget, "setup-sdk", "setup-sdk"); err != nil {
+				return err
+			}
+		}
 		fmt.Printf("\nNext: cd %s && liferay build   (populates the bundle)\n", absTarget)
 		fmt.Println("Then: liferay server up   (starts Tomcat + MySQL)")
 		return nil

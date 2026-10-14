@@ -53,6 +53,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Workspace nested in a worktree, so it is classified live or orphaned
   instead of being reported as unverifiable.
 
+### Changed — `worktree add`
+
+- `--skip-build` now runs `ant setup-sdk` in a monorepo worktree instead of
+  nothing. Previously the worktree had no Gradle wrapper distribution or
+  portal tools, so every Gradle command failed at startup until `ant all` or
+  `ant setup-sdk` was run by hand.
+
 ## [v1.5.0] - 2026-09-22
 
 ### Added — `dashboard`

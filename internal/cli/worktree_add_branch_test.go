@@ -4,6 +4,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -129,6 +130,8 @@ func TestRunWorktreeAdd_DetectsProjectTypeOnWorktree(t *testing.T) {
 	worktreeSkipBuild = true
 	t.Cleanup(func() { worktreeSkipBuild = origSkipBuild })
 
+	fakeAnt(t)
+
 	repoDir := newSparsePrimary(t)
 
 	chdir(t, repoDir)
@@ -145,6 +148,57 @@ func TestRunWorktreeAdd_DetectsProjectTypeOnWorktree(t *testing.T) {
 	if len(matches) != 1 {
 		t.Errorf("expected one generated app.server.<user>.properties, got %v", matches)
 	}
+}
+
+// TestRunWorktreeAdd_SkipBuildRunsSetupSDK confirms that --skip-build still
+// runs "ant setup-sdk" in a monorepo worktree, so Gradle commands work
+// without the full "ant all" build.
+func TestRunWorktreeAdd_SkipBuildRunsSetupSDK(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git not on PATH")
+	}
+	t.Setenv("HOME", t.TempDir())
+
+	origSkipBuild := worktreeSkipBuild
+	worktreeSkipBuild = true
+	t.Cleanup(func() { worktreeSkipBuild = origSkipBuild })
+
+	antArgsFile := fakeAnt(t)
+
+	repoDir := newSparsePrimary(t)
+
+	chdir(t, repoDir)
+
+	worktreePath := filepath.Join(t.TempDir(), "new-worktree")
+	if err := runWorktreeAdd(nil, []string{"master", worktreePath}); err != nil {
+		t.Fatalf("runWorktreeAdd returned an error: %v", err)
+	}
+
+	antArgs, err := os.ReadFile(antArgsFile)
+	if err != nil {
+		t.Fatalf("ant was not run: %v", err)
+	}
+	if got := strings.TrimSpace(string(antArgs)); got != "setup-sdk" {
+		t.Errorf("ant ran with %q, want setup-sdk", got)
+	}
+}
+
+// fakeAnt puts an ant script first on PATH that records its arguments, and
+// returns the file it records them to.
+func fakeAnt(t *testing.T) string {
+	t.Helper()
+	if runtime.GOOS == "windows" {
+		t.Skip("stubs ant with a shell script, which doesn't run on Windows")
+	}
+
+	binDir := t.TempDir()
+	antArgsFile := filepath.Join(binDir, "ant-args")
+	script := "#!/bin/sh\necho \"$@\" > " + antArgsFile + "\n"
+	if err := os.WriteFile(filepath.Join(binDir, "ant"), []byte(script), 0755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
+	return antArgsFile
 }
 
 // newSparsePrimary creates a repository whose master branch is a monorepo

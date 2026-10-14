@@ -316,7 +316,7 @@ This runs `git worktree add`, then:
 - Copies `build.*.properties`, `test.*.properties`, `release.*.properties`
 - Generates `app.server.<user>.properties` pointing bundles inside the worktree
 
-By default this also runs `ant all` to populate the bundle. To skip the build:
+By default this also runs `ant all` to populate the bundle. To skip the build and run only `ant setup-sdk`, which installs the Gradle wrapper and portal tools so Gradle commands work:
 
 ```sh
 liferay worktree add LPD-99999 ../LPD-99999 --skip-build
