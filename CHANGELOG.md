@@ -53,6 +53,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Workspace nested in a worktree, so it is classified live or orphaned
   instead of being reported as unverifiable.
 
+### Added — `worktree add`
+
+- `worktree add` seeds the new worktree from another worktree of the
+  repository that was built (`ant all`) at the commit it starts from: that
+  worktree's bundle, Maven snapshots, Gradle caches, and SDK jars are cloned
+  with copy-on-write (`cp -c` on macOS, `cp --reflink=auto` on Linux) instead
+  of running `ant all`, then `ant setup-sdk` runs. The source must still sit
+  at that commit with no uncommitted changes; when no worktree qualifies, the
+  normal `ant all` runs. `--seed-from <path>` picks a specific source (the
+  reason is printed when it doesn't qualify), and `--skip-build` never seeds.
+  Runtime state (`data/`, `logs/`, `osgi/state/`, `osgi/configs/`,
+  `osgi/modules/`, Tomcat `work/` and `temp/`) is not copied.
+
 ### Changed — `worktree add`
 
 - `--skip-build` now runs `ant setup-sdk` in a monorepo worktree instead of

@@ -55,10 +55,15 @@ master — or, when the primary checkout is not a Liferay project root (such as
 liferay-portal-ee's sparse master-private checkout), from the primary
 checkout's current branch.
 
-By default, runs "ant all" after creating the worktree to populate the bundle
-directory. Pass --skip-build to skip this step (you'll need to run
-"liferay build" manually before "liferay server up"). A worktree that is not a
-Liferay project root gets the symlinks and copies only, and no build.`,
+By default, when another worktree of the repository was built ("ant all") at
+the commit the new worktree starts from, its bundle and Maven snapshots are
+cloned (copy-on-write on macOS and Linux) instead, which takes about a minute
+rather than ten. Otherwise "ant all" runs to populate the bundle directory.
+Pass --seed-from <path> to seed from a specific worktree; when it doesn't
+qualify, the normal build runs. Pass --skip-build to skip the build (you'll
+need to run "liferay build" manually before "liferay server up"). A worktree
+that is not a Liferay project root gets the symlinks and copies only, and no
+build.`,
 	Args: cobra.RangeArgs(1, 2),
 	RunE: runWorktreeAdd,
 }
@@ -180,12 +185,14 @@ func emitWorktreeListJSON(entries []worktreeEntry, out io.Writer) error {
 }
 
 var (
+	worktreeSeedFrom  string
 	worktreeSkipBuild bool
 	worktreeRemoveYes bool
 )
 
 func init() {
 	worktreeAddCmd.Flags().BoolVar(&worktreeSkipBuild, "skip-build", false, "Skip running 'liferay build' (ant all) after creating the worktree; a monorepo worktree still runs 'ant setup-sdk' so Gradle commands work")
+	worktreeAddCmd.Flags().StringVar(&worktreeSeedFrom, "seed-from", "", "Seed from this built monorepo worktree instead of the one found automatically; its bundle and Maven snapshots are cloned (copy-on-write) instead of running 'ant all'. Falls back to the full build when it doesn't qualify")
 	worktreeRemoveCmd.Flags().BoolVar(&worktreeRemoveYes, "yes", false, "Skip the confirmation prompt. Required when stdin is not a TTY (or set LIFERAY_CLI_ASSUME_YES=1).")
 	worktreeListCmd.Flags().BoolVar(&worktreeListJSON, "json", false, "Emit machine-readable JSON instead of git porcelain. Schema is stable: [{path, branch, slot, primary}].")
 	worktreePruneCmd.Flags().BoolVar(&worktreePruneYes, "yes", false, "Skip the confirmation prompt. Required when stdin is not a TTY (or set LIFERAY_CLI_ASSUME_YES=1).")
@@ -236,6 +243,21 @@ func runWorktreeAdd(cmd *cobra.Command, args []string) error {
 	if projectType == portal.ProjectTypeUnknown {
 		fmt.Println("\nNot a Liferay project root: skipping the build. Build a Liferay Workspace inside it with \"liferay -C <workspace> build\".")
 		return nil
+	}
+
+	if projectType == portal.Monorepo {
+		srcRoot := ""
+		if worktreeSeedFrom != "" {
+			srcRoot, err = filepath.Abs(worktreeSeedFrom)
+			if err != nil {
+				return fmt.Errorf("resolving path %q: %w", worktreeSeedFrom, err)
+			}
+		} else if !worktreeSkipBuild {
+			srcRoot = findSeedSource(absTarget)
+		}
+		if srcRoot != "" && trySeedWorktree(srcRoot, absTarget) {
+			return finishSeededWorktree(primaryRoot, srcRoot, absTarget, projectType)
+		}
 	}
 
 	if worktreeSkipBuild {
