@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed — `test` / `test-integration`
+
+- A run with failing tests now exits non-zero. Liferay's Gradle plugins set
+  `ignoreFailures = true` on the `test` and `testIntegration` tasks, so Gradle
+  ended `BUILD SUCCESSFUL` and the CLI printed `OK` with exit code 0 even when
+  tests failed. The commands now pass `-Dtest.ignore.failures=false` /
+  `-DtestIntegration.ignore.failures=false` to Gradle.
+- After every run the commands print a summary read from the module's JUnit XML
+  results (`6 tests, 1 failed, 0 skipped`), followed by one `FAILED
+  <class>#<method>` line per failing test (first 20). When the run produced no
+  result files, for example because `--tests` matched nothing, a warning is
+  printed instead; the exit code is unchanged in that case.
+
 ## [v1.5.0] - 2026-09-22
 
 ### Added — `dashboard`

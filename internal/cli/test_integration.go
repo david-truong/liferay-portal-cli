@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"time"
 
 	"github.com/david-truong/liferay-portal-cli/internal/docker"
 	"github.com/david-truong/liferay-portal-cli/internal/gradle"
@@ -64,7 +65,7 @@ func runTestIntegration(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	gwArgs := []string{"testIntegration", "--tests", testIntegrationTests}
+	gwArgs := testIntegrationGradleArgs(testIntegrationTests)
 
 	initScript, err := writeSlotInitScript(portalRoot)
 	if err != nil {
@@ -78,7 +79,18 @@ func runTestIntegration(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
-	return logrun.Run(gwCmd, logrun.Options{Label: "test-integration-" + filepath.Base(modulePath), Verbose: verbose, WorktreeRoot: portalRoot})
+
+	label := "test-integration-" + filepath.Base(modulePath)
+	start := time.Now()
+	runErr := logrun.Run(gwCmd, logrun.Options{Label: label, Verbose: verbose, WorktreeRoot: portalRoot})
+	printTestSummary(label, modulePath, "testIntegration", "integration", start)
+	return runErr
+}
+
+// testIntegrationGradleArgs disables Liferay's default ignoreFailures on the
+// testIntegration task so failing tests make Gradle exit non-zero.
+func testIntegrationGradleArgs(filter string) []string {
+	return []string{"-DtestIntegration.ignore.failures=false", "testIntegration", "--tests", filter}
 }
 
 // writeSlotInitScript writes <state-dir>/gradle/test-integration-init.gradle
