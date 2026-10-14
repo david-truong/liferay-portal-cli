@@ -52,6 +52,22 @@ func isWorkspaceRoot(dir string) bool {
 	return false
 }
 
+// NestedWorkspaces returns the Liferay Workspace roots directly under
+// dir/workspaces — where liferay-portal and liferay-portal-ee keep their
+// workspaces — sorted by path. A git worktree of either repository can run
+// a server from each of them, independently of the worktree root itself.
+func NestedWorkspaces(dir string) []string {
+	matches, _ := filepath.Glob(filepath.Join(dir, "workspaces", "*"))
+
+	var workspaces []string
+	for _, match := range matches {
+		if isWorkspaceRoot(match) {
+			workspaces = append(workspaces, match)
+		}
+	}
+	return workspaces
+}
+
 // ErrNotInPortal is the sentinel wrapped by FindRoot's failure so callers can
 // distinguish "not inside a portal" from other errors via errors.Is, without
 // depending on message text.
