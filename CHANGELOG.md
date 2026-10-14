@@ -44,6 +44,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Previously the process check expected the monorepo's `.bundles/` directory,
   so a workspace Tomcat (running from `bundles/`) was left running with a
   "possible PID reuse" warning.
+- `worktree prune` now treats state whose recorded path still exists but is
+  neither a Liferay project nor inside a git checkout as orphaned. A
+  workspace Tomcat left running when its worktree was deleted recreated
+  `workspaces/<workspace>/bundles/<tomcat>/logs`, so the path existed again
+  and prune kept the state and its slot claimed indefinitely.
 
 ## [v1.5.0] - 2026-09-22
 

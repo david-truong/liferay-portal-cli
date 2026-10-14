@@ -7,6 +7,7 @@ import (
 	"regexp"
 
 	"github.com/david-truong/liferay-portal-cli/internal/fsutil"
+	"github.com/david-truong/liferay-portal-cli/internal/portal"
 	"github.com/david-truong/liferay-portal-cli/internal/state"
 )
 
@@ -98,7 +99,7 @@ func ScanClaims(liveParents []string) ([]Claim, error) {
 // matches the directory name.
 func resolveStatus(dirName, recordedPath string, liveParents []string) (string, ClaimStatus) {
 	if recordedPath != "" {
-		if fsutil.Exists(recordedPath) {
+		if isLiveProject(recordedPath) {
 			return recordedPath, ClaimLive
 		}
 		return recordedPath, ClaimOrphaned
@@ -114,10 +115,32 @@ func resolveStatus(dirName, recordedPath string, liveParents []string) (string, 
 		if state.ID(candidate) != dirName {
 			continue
 		}
-		if fsutil.Exists(candidate) {
+		if isLiveProject(candidate) {
 			return candidate, ClaimLive
 		}
 		return candidate, ClaimOrphaned
 	}
 	return "", ClaimUnknown
+}
+
+// isLiveProject reports whether path still holds the project its claim was
+// made for: a Liferay project, or a directory inside a git checkout, such as
+// liferay-portal-ee's sparse master-private checkout. Existence alone is not
+// enough: a Tomcat left running when its worktree was deleted recreates
+// bundles/<tomcat>/logs there, outside any checkout.
+func isLiveProject(path string) bool {
+	if !fsutil.Exists(path) {
+		return false
+	}
+	if portal.DetectProjectType(path) != portal.ProjectTypeUnknown {
+		return true
+	}
+	for dir := path; ; dir = filepath.Dir(dir) {
+		if fsutil.Exists(filepath.Join(dir, ".git")) {
+			return true
+		}
+		if filepath.Dir(dir) == dir {
+			return false
+		}
+	}
 }

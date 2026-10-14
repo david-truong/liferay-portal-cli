@@ -29,6 +29,20 @@ func setHome(t *testing.T) {
 	t.Setenv("USERPROFILE", home)
 }
 
+// livePortal stages a directory with the monorepo markers, so a claim on it
+// is still a Liferay project.
+func livePortal(t *testing.T) string {
+	t.Helper()
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "build.xml"), nil, 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Mkdir(filepath.Join(dir, "modules"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	return dir
+}
+
 func findClaim(claims []Claim, id string) (Claim, bool) {
 	for _, c := range claims {
 		if filepath.Base(c.Dir) == id {
@@ -41,7 +55,7 @@ func findClaim(claims []Claim, id string) (Claim, bool) {
 func TestScanClaimsRecordedPath(t *testing.T) {
 	setHome(t)
 
-	live := t.TempDir() // exists
+	live := livePortal(t)
 	gone := filepath.Join(t.TempDir(), "deleted-worktree")
 
 	writeClaim(t, "live-aaaaaaaa", State{Slot: 0, Engine: "mysql", WorktreePath: live})
@@ -64,11 +78,52 @@ func TestScanClaimsRecordedPath(t *testing.T) {
 	}
 }
 
+// A Tomcat left running when its worktree was deleted recreates
+// bundles/<tomcat>/logs, so the recorded path exists again without being a
+// Liferay project. Its claim is orphaned and no longer holds its slot.
+func TestScanClaimsRecordedPathNoLongerAProject(t *testing.T) {
+	setHome(t)
+	shell := filepath.Join(t.TempDir(), "workspaces", "liferay-aihub-workspace")
+	if err := os.MkdirAll(filepath.Join(shell, "bundles", "tomcat-10.1.59", "logs"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	writeClaim(t, "shell-dddddddd", State{Slot: 5, WorktreePath: shell})
+
+	claims, err := ScanClaims(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c, _ := findClaim(claims, "shell-dddddddd"); c.Status != ClaimOrphaned {
+		t.Errorf("status = %q, want orphaned", c.Status)
+	}
+	if claimedSlots("")[5] {
+		t.Error("slot 5 (no longer a Liferay project) should NOT be claimed")
+	}
+}
+
+// A sparse checkout's root is no Liferay project, yet still a live checkout.
+func TestScanClaimsRecordedPathInsideGitCheckout(t *testing.T) {
+	setHome(t)
+	checkout := t.TempDir()
+	if err := os.Mkdir(filepath.Join(checkout, ".git"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	writeClaim(t, "sparse-eeeeeeee", State{Slot: 6, WorktreePath: checkout})
+
+	claims, err := ScanClaims(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c, _ := findClaim(claims, "sparse-eeeeeeee"); c.Status != ClaimLive {
+		t.Errorf("status = %q, want live", c.Status)
+	}
+}
+
 // A recorded path that still exists is authoritative even when its parent is
 // not among liveParents — a live worktree from another repo is never an orphan.
 func TestScanClaimsRecordedPathIsCrossRepoSafe(t *testing.T) {
 	setHome(t)
-	otherRepo := t.TempDir()
+	otherRepo := livePortal(t)
 	writeClaim(t, "ee-cccccccc", State{Slot: 4, WorktreePath: otherRepo})
 
 	claims, err := ScanClaims([]string{"/some/unrelated/parent"})
@@ -92,7 +147,10 @@ func TestScanClaimsLegacyHashReconstruction(t *testing.T) {
 	// Live: path exists under the same parent.
 	liveBase := "LPD-11111"
 	livePath := filepath.Join(parent, liveBase)
-	if err := os.MkdirAll(livePath, 0755); err != nil {
+	if err := os.MkdirAll(filepath.Join(livePath, "modules"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(livePath, "build.xml"), nil, 0644); err != nil {
 		t.Fatal(err)
 	}
 	writeClaim(t, state.ID(livePath), State{Slot: 8})
@@ -143,7 +201,7 @@ func TestAllocateFreshSlotReservesZeroForLinkedWorktree(t *testing.T) {
 // worktree already claims.
 func TestAllocateFreshSlotLinkedSkipsClaimed(t *testing.T) {
 	setHome(t)
-	live := t.TempDir()
+	live := livePortal(t)
 	writeClaim(t, "other-aaaaaaaa", State{Slot: 1, WorktreePath: live})
 	if got := allocateFreshSlot(t.TempDir(), false); got < 2 {
 		t.Errorf("got slot %d, want >= 2 (0 reserved, 1 claimed)", got)
@@ -152,7 +210,7 @@ func TestAllocateFreshSlotLinkedSkipsClaimed(t *testing.T) {
 
 func TestClaimedSlotsSkipsDeletedWorktree(t *testing.T) {
 	setHome(t)
-	live := t.TempDir()
+	live := livePortal(t)
 	gone := filepath.Join(t.TempDir(), "deleted")
 
 	writeClaim(t, "live-12340000", State{Slot: 2, WorktreePath: live})
