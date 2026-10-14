@@ -7,18 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Fixed — `test` / `test-integration`
+## [v1.6.0] - 2026-10-14
 
-- A run with failing tests now exits non-zero. Liferay's Gradle plugins set
-  `ignoreFailures = true` on the `test` and `testIntegration` tasks, so Gradle
-  ended `BUILD SUCCESSFUL` and the CLI printed `OK` with exit code 0 even when
-  tests failed. The commands now pass `-Dtest.ignore.failures=false` /
-  `-DtestIntegration.ignore.failures=false` to Gradle.
-- After every run the commands print a summary read from the module's JUnit XML
-  results (`6 tests, 1 failed, 0 skipped`), followed by one `FAILED
-  <class>#<method>` line per failing test (first 20). When the run produced no
-  result files, for example because `--tests` matched nothing, a warning is
-  printed instead; the exit code is unchanged in that case.
+### Added — `worktree add`
+
+- `worktree add` seeds the new worktree from another worktree of the
+  repository that was built (`ant all`) at the commit it starts from: that
+  worktree's bundle, Maven snapshots, Gradle caches, and SDK jars are cloned
+  with copy-on-write (`cp -c` on macOS, `cp --reflink=auto` on Linux) instead
+  of running `ant all`, then `ant setup-sdk` runs. The source must still sit
+  at that commit with no uncommitted changes; when no worktree qualifies, the
+  normal `ant all` runs. `--seed-from <path>` picks a specific source (the
+  reason is printed when it doesn't qualify), and `--skip-build` never seeds.
+  Runtime state (`data/`, `logs/`, `osgi/state/`, `osgi/configs/`,
+  `osgi/modules/`, Tomcat `work/` and `temp/`) is not copied.
 
 ### Changed — `dashboard`
 
@@ -34,6 +36,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   checkout outside every Liferay project.
 - `ctrl+d` on a workspace tab explains how to remove its worktree instead of
   deleting it, so removing a workspace never wipes the worktree around it.
+
+### Changed — `worktree add`
+
+- `--skip-build` now runs `ant setup-sdk` in a monorepo worktree instead of
+  nothing. Previously the worktree had no Gradle wrapper distribution or
+  portal tools, so every Gradle command failed at startup until `ant all` or
+  `ant setup-sdk` was run by hand.
+
+### Fixed — `test` / `test-integration`
+
+- A run with failing tests now exits non-zero. Liferay's Gradle plugins set
+  `ignoreFailures = true` on the `test` and `testIntegration` tasks, so Gradle
+  ended `BUILD SUCCESSFUL` and the CLI printed `OK` with exit code 0 even when
+  tests failed. The commands now pass `-Dtest.ignore.failures=false` /
+  `-DtestIntegration.ignore.failures=false` to Gradle.
+- After every run the commands print a summary read from the module's JUnit XML
+  results (`6 tests, 1 failed, 0 skipped`), followed by one `FAILED
+  <class>#<method>` line per failing test (first 20). When the run produced no
+  result files, for example because `--tests` matched nothing, a warning is
+  printed instead; the exit code is unchanged in that case.
 
 ### Fixed — `worktree remove` / `worktree prune`
 
@@ -52,26 +74,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `worktree prune` now resolves legacy state (no recorded path) of a Liferay
   Workspace nested in a worktree, so it is classified live or orphaned
   instead of being reported as unverifiable.
-
-### Added — `worktree add`
-
-- `worktree add` seeds the new worktree from another worktree of the
-  repository that was built (`ant all`) at the commit it starts from: that
-  worktree's bundle, Maven snapshots, Gradle caches, and SDK jars are cloned
-  with copy-on-write (`cp -c` on macOS, `cp --reflink=auto` on Linux) instead
-  of running `ant all`, then `ant setup-sdk` runs. The source must still sit
-  at that commit with no uncommitted changes; when no worktree qualifies, the
-  normal `ant all` runs. `--seed-from <path>` picks a specific source (the
-  reason is printed when it doesn't qualify), and `--skip-build` never seeds.
-  Runtime state (`data/`, `logs/`, `osgi/state/`, `osgi/configs/`,
-  `osgi/modules/`, Tomcat `work/` and `temp/`) is not copied.
-
-### Changed — `worktree add`
-
-- `--skip-build` now runs `ant setup-sdk` in a monorepo worktree instead of
-  nothing. Previously the worktree had no Gradle wrapper distribution or
-  portal tools, so every Gradle command failed at startup until `ant all` or
-  `ant setup-sdk` was run by hand.
 
 ## [v1.5.0] - 2026-09-22
 
