@@ -20,10 +20,10 @@ func TestCompareVersions(t *testing.T) {
 	}{
 		{"1.0.0", "1.0.0", 0},
 		{"1.0.1", "1.0.0", 1},
-		{"5.3.9", "5.3.31", -1},   // numeric, not lexical
-		{"5.3.31", "5.3.9", 1},    // mirror
-		{"6.0.0", "5.99.99", 1},   // major dominates
-		{"1.0", "1.0.0", -1}, // shorter compares as if missing segments are < anything
+		{"5.3.9", "5.3.31", -1}, // numeric, not lexical
+		{"5.3.31", "5.3.9", 1},  // mirror
+		{"6.0.0", "5.99.99", 1}, // major dominates
+		{"1.0", "1.0.0", -1},    // shorter compares as if missing segments are < anything
 	}
 	for _, c := range cases {
 		got := compareVersions(c.a, c.b)

@@ -17,10 +17,10 @@ import (
 type TomcatState int
 
 const (
-	TomcatStopped TomcatState = iota
-	TomcatStale               // pid file present, process gone
-	TomcatStarting            // process alive, HTTP not answering yet
-	TomcatReady               // process alive and HTTP answering
+	TomcatStopped  TomcatState = iota
+	TomcatStale                // pid file present, process gone
+	TomcatStarting             // process alive, HTTP not answering yet
+	TomcatReady                // process alive and HTTP answering
 )
 
 // Status is one probe result for one worktree.
