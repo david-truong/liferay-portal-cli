@@ -38,6 +38,14 @@ When a golden test fails because of an intentional change, update the
 fixtures under `internal/tomcat/testdata/` and confirm the diff is what you
 expect.
 
+The `internal/review` live LLM evaluation is opt-in. It needs Ollama running
+with `qwen3-coder:30b` and a liferay-portal checkout:
+
+```sh
+LIFERAY_REVIEW_EVAL=1 LIFERAY_REVIEW_EVAL_CHECKOUT=~/path/to/liferay-portal \
+  go test -timeout 30m -run TestRun_PlantedViolationsRecall ./internal/review/
+```
+
 ## Building a release locally
 
 ```sh
