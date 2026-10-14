@@ -168,6 +168,37 @@ func TestScanClaimsLegacyHashReconstruction(t *testing.T) {
 	}
 }
 
+// A Liferay Workspace nested in a worktree lives at <worktree>/workspaces/<name>,
+// so its legacy state is reconstructed from the worktree's workspaces directory.
+func TestScanClaimsLegacyNestedWorkspace(t *testing.T) {
+	setHome(t)
+	workspaces := filepath.Join(t.TempDir(), "workspaces")
+
+	gonePath := filepath.Join(workspaces, "deleted-workspace")
+	writeClaim(t, state.ID(gonePath), State{Slot: 7})
+
+	livePath := filepath.Join(workspaces, "live-workspace")
+	if err := os.MkdirAll(filepath.Join(livePath, "modules"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(livePath, "build.xml"), nil, 0644); err != nil {
+		t.Fatal(err)
+	}
+	writeClaim(t, state.ID(livePath), State{Slot: 8})
+
+	claims, err := ScanClaims([]string{workspaces})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if c, _ := findClaim(claims, state.ID(gonePath)); c.Status != ClaimOrphaned || c.ResolvedPath != gonePath {
+		t.Errorf("nested gone: status=%q resolved=%q, want orphaned %q", c.Status, c.ResolvedPath, gonePath)
+	}
+	if c, _ := findClaim(claims, state.ID(livePath)); c.Status != ClaimLive {
+		t.Errorf("nested live: status=%q, want live", c.Status)
+	}
+}
+
 // Legacy state whose path cannot be reproduced from any known parent is left
 // untouched rather than guessed at.
 func TestScanClaimsLegacyUnknown(t *testing.T) {

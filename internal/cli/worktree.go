@@ -634,8 +634,10 @@ func slotLabel(c docker.Claim) string {
 }
 
 // liveWorktreeParents returns the parent directories of the current repo's
-// live worktrees, used to reconstruct paths for legacy state dirs. Returns nil
-// when not inside a git repository — recorded-path orphans are still detected.
+// live worktrees, plus each worktree's workspaces directory, used to
+// reconstruct paths for legacy state dirs (including those of nested Liferay
+// Workspaces). Returns nil when not inside a git repository — recorded-path
+// orphans are still detected.
 func liveWorktreeParents() []string {
 	porcelain, err := gitOutput("worktree", "list", "--porcelain")
 	if err != nil {
@@ -646,10 +648,11 @@ func liveWorktreeParents() []string {
 	seen := make(map[string]bool)
 	var parents []string
 	for _, e := range entries {
-		parent := filepath.Dir(e.Path)
-		if !seen[parent] {
-			seen[parent] = true
-			parents = append(parents, parent)
+		for _, parent := range []string{filepath.Dir(e.Path), filepath.Join(e.Path, "workspaces")} {
+			if !seen[parent] {
+				seen[parent] = true
+				parents = append(parents, parent)
+			}
 		}
 	}
 	return parents
