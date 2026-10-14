@@ -10,7 +10,9 @@ import (
 )
 
 func TestLoadOrInitStateCreatesFile(t *testing.T) {
-	home := t.TempDir(); t.Setenv("HOME", home); t.Setenv("USERPROFILE", home)
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
 	dir := t.TempDir()
 	state, err := loadOrInitState(dir, "", dir, true)
 	if err != nil {
@@ -34,7 +36,9 @@ func TestLoadOrInitStateCreatesFile(t *testing.T) {
 }
 
 func TestLoadOrInitStateReusesExisting(t *testing.T) {
-	home := t.TempDir(); t.Setenv("HOME", home); t.Setenv("USERPROFILE", home)
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
 	dir := t.TempDir()
 	existing := State{Slot: 5, Engine: EngineMariaDB}
 	data, _ := json.Marshal(existing)
@@ -55,7 +59,9 @@ func TestLoadOrInitStateReusesExisting(t *testing.T) {
 }
 
 func TestLoadOrInitStateOverridesEngine(t *testing.T) {
-	home := t.TempDir(); t.Setenv("HOME", home); t.Setenv("USERPROFILE", home)
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
 	dir := t.TempDir()
 	existing := State{Slot: 3, Engine: EngineMySQL}
 	data, _ := json.Marshal(existing)
@@ -76,7 +82,9 @@ func TestLoadOrInitStateOverridesEngine(t *testing.T) {
 }
 
 func TestLoadOrInitStateRejectsUnsupportedEngine(t *testing.T) {
-	home := t.TempDir(); t.Setenv("HOME", home); t.Setenv("USERPROFILE", home)
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
 	dir := t.TempDir()
 	_, err := loadOrInitState(dir, "oracle", dir, true)
 	if err == nil {
@@ -91,7 +99,9 @@ func TestLoadOrInitStateRejectsUnsupportedEngine(t *testing.T) {
 // running under a different slot. Corruption must surface as an error
 // naming the file, never as a fabricated State{Slot: 0}.
 func TestLoadOrInitStateFailsLoudlyOnCorruptFile(t *testing.T) {
-	home := t.TempDir(); t.Setenv("HOME", home); t.Setenv("USERPROFILE", home)
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
 	dir := t.TempDir()
 	portsFile := filepath.Join(dir, "ports.json")
 	if err := os.WriteFile(portsFile, []byte("{not valid json"), 0644); err != nil {

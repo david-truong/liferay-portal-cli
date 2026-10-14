@@ -67,4 +67,3 @@ func unpatchBundle(paths tomcat.Paths, stateDir string) error {
 	fmt.Printf("Restored bundle from %s\n", snapshotDir)
 	return nil
 }
-

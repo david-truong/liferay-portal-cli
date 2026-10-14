@@ -342,4 +342,3 @@ func currentStatus() (int, bool) {
 	}
 	return tomcat.Status(paths)
 }
-

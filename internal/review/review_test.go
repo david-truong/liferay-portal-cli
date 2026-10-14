@@ -10,11 +10,6 @@ import (
 	"time"
 )
 
-// testCheckoutDir is used only as a target for the git_grep/git_ls_files/
-// read_file tools' precedent lookups — the synthetic file the test diff adds
-// doesn't actually need to exist there.
-const testCheckoutDir = "/Users/dtruong/Projects/liferay/liferay-portal"
-
 // plantedViolations are the 5 deliberately planted violations in
 // testdata/failures.diff (see ~/.claude/skills/brian-review/test-fixtures/README.md).
 var plantedViolations = []string{"102", "306", "401", "402", "801"}
@@ -25,13 +20,31 @@ var plantedViolations = []string{"102", "306", "401", "402", "801"}
 // salience-bias gap on qwen3-coder:30b (the model reports the diff's most
 // visually obvious defect regardless of which rule it's asked about, even
 // when given only that rule's text), not a bug introduced by this port.
+//
+// Opt-in: set LIFERAY_REVIEW_EVAL=1 and LIFERAY_REVIEW_EVAL_CHECKOUT to a
+// liferay-portal checkout, and run with -timeout 30m.
 func TestRun_PlantedViolationsRecall(t *testing.T) {
-	if _, err := http.Get("http://localhost:11434/api/tags"); err != nil {
+	if testing.Short() {
+		t.Skip("live LLM evaluation, skipping in short mode")
+	}
+	if os.Getenv("LIFERAY_REVIEW_EVAL") != "1" {
+		t.Skip("set LIFERAY_REVIEW_EVAL=1 to run the live LLM evaluation")
+	}
+
+	checkoutDir := os.Getenv("LIFERAY_REVIEW_EVAL_CHECKOUT")
+	if checkoutDir == "" {
+		t.Skip("set LIFERAY_REVIEW_EVAL_CHECKOUT to a liferay-portal checkout")
+	}
+	if _, err := os.Stat(checkoutDir); err != nil {
+		t.Skipf("liferay-portal checkout %s not present, skipping", checkoutDir)
+	}
+
+	client := &http.Client{Timeout: 5 * time.Second}
+	response, err := client.Get("http://localhost:11434/api/tags")
+	if err != nil {
 		t.Skip("Ollama not reachable at http://localhost:11434, skipping")
 	}
-	if _, err := os.Stat(testCheckoutDir); err != nil {
-		t.Skip("liferay-portal checkout not present, skipping")
-	}
+	response.Body.Close()
 
 	diff, err := os.ReadFile("testdata/failures.diff")
 	if err != nil {
@@ -41,7 +54,7 @@ func TestRun_PlantedViolationsRecall(t *testing.T) {
 	cfg := Config{
 		Host:         "http://localhost:11434",
 		Model:        "qwen3-coder:30b",
-		CheckoutDir:  testCheckoutDir,
+		CheckoutDir:  checkoutDir,
 		MaxToolIters: 4,
 		Timeout:      120 * time.Second,
 	}

@@ -168,9 +168,9 @@ func TestRegenerate_ExcludesPrefixes(t *testing.T) {
 		t.Error("keeper module dropped")
 	}
 	for _, banned := range []string{
-		`modules/third-party/legacy-fork`,        // pre-existing entry should be evicted
-		`modules/third-party/some-vendor`,        // new discovery should be skipped
-		`modules/sdk/gradle-plugins-util`,        // new discovery under sdk should be skipped
+		`modules/third-party/legacy-fork`, // pre-existing entry should be evicted
+		`modules/third-party/some-vendor`, // new discovery should be skipped
+		`modules/sdk/gradle-plugins-util`, // new discovery under sdk should be skipped
 	} {
 		if strings.Contains(out, banned) {
 			t.Errorf("excluded path leaked through: %s", banned)
