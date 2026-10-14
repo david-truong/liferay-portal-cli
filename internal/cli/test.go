@@ -2,6 +2,7 @@ package cli
 
 import (
 	"path/filepath"
+	"time"
 
 	"github.com/david-truong/liferay-portal-cli/internal/gradle"
 	"github.com/david-truong/liferay-portal-cli/internal/logrun"
@@ -51,9 +52,20 @@ func runTest(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	gwCmd, err := gradle.Command(modulePath, "test", "--tests", testTests)
+	gwCmd, err := gradle.Command(modulePath, testGradleArgs(testTests)...)
 	if err != nil {
 		return err
 	}
-	return logrun.Run(gwCmd, logrun.Options{Label: "test-" + filepath.Base(modulePath), Verbose: verbose, WorktreeRoot: portalRoot})
+
+	label := "test-" + filepath.Base(modulePath)
+	start := time.Now()
+	runErr := logrun.Run(gwCmd, logrun.Options{Label: label, Verbose: verbose, WorktreeRoot: portalRoot})
+	printTestSummary(label, modulePath, "test", "unit/test", start)
+	return runErr
+}
+
+// testGradleArgs disables Liferay's default ignoreFailures on the test task so
+// failing tests make Gradle exit non-zero.
+func testGradleArgs(filter string) []string {
+	return []string{"-Dtest.ignore.failures=false", "test", "--tests", filter}
 }

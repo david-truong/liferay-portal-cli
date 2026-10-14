@@ -284,6 +284,8 @@ liferay test change-tracking-web --tests "*FooTest"
 liferay test change-tracking-web --tests "com.liferay.foo.FooTest.testBar"
 ```
 
+The command exits non-zero when any test fails and prints a summary (tests, failed, skipped, and each failing `class#method`) read from the module's JUnit XML results.
+
 ### `liferay test-integration`
 
 Run integration tests in a module against the host-native Liferay server started by `liferay server start`. On slot 0 (stock ports) this is a pass-through to `gw testIntegration --tests <filter>`. On slot > 0 the CLI writes a Gradle init script that pins `testIntegrationTomcat.portNumber` to the bundle's HTTP port and forwards `-Dliferay.arquillian.port` / `-Dliferay.data.guard.port` to the test JVM so it matches the server-side OSGi-configured ports.
@@ -292,6 +294,8 @@ Run integration tests in a module against the host-native Liferay server started
 liferay test-integration change-tracking-web --tests "*FooTest"
 liferay test-integration change-tracking-web --tests "com.liferay.foo.FooTest"
 ```
+
+Like `liferay test`, it exits non-zero when any test fails and prints a summary of the results.
 
 ### `liferay worktree`
 
