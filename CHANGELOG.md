@@ -49,6 +49,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   workspace Tomcat left running when its worktree was deleted recreated
   `workspaces/<workspace>/bundles/<tomcat>/logs`, so the path existed again
   and prune kept the state and its slot claimed indefinitely.
+- `worktree prune` now resolves legacy state (no recorded path) of a Liferay
+  Workspace nested in a worktree, so it is classified live or orphaned
+  instead of being reported as unverifiable.
 
 ## [v1.5.0] - 2026-09-22
 
