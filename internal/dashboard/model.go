@@ -452,8 +452,13 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			})
 
 	case "ctrl+d":
-		if w.Primary {
+		if w.Primary || gitWorktreeRoot(w) == m.cfg.PrimaryRoot {
 			m.note[m.active] = "cannot delete the primary worktree"
+			return m, nil
+		}
+		if w.Workspace {
+			m.note[m.active] = "cannot delete a workspace; run liferay worktree remove " +
+				gitWorktreeRoot(w) + " to delete its worktree"
 			return m, nil
 		}
 		if m.action[m.active] != "" || m.runs[m.active].running {
@@ -580,19 +585,7 @@ func (m model) startDelete() (tea.Model, tea.Cmd) {
 	w := m.cfg.Worktrees[index]
 	m.action[index] = "delete"
 	m.note[index] = ""
-	return m, deleteCmd(m.cfg.SelfExe, m.primaryPath(), w.Path, index, tabLabel(w))
-}
-
-// primaryPath is the main worktree's path — the safe cwd for git to remove a
-// sibling worktree from. Falls back to the target's parent if no primary is
-// tagged (it always is in practice).
-func (m model) primaryPath() string {
-	for _, w := range m.cfg.Worktrees {
-		if w.Primary {
-			return w.Path
-		}
-	}
-	return filepath.Dir(m.cfg.Worktrees[m.active].Path)
+	return m, deleteCmd(m.cfg.SelfExe, m.cfg.PrimaryRoot, w.Path, index, tabLabel(w))
 }
 
 // removeTab drops tab i from every per-tab slice in lockstep so they stay
@@ -980,10 +973,23 @@ func wrapTabs(tabs []string, width int) string {
 }
 
 func tabLabel(w Worktree) string {
-	if w.Branch != "" {
-		return w.Branch
+	label := w.Branch
+	if label == "" {
+		label = filepath.Base(gitWorktreeRoot(w))
 	}
-	return filepath.Base(w.Path)
+	if w.Workspace {
+		label += " · " + filepath.Base(w.Path)
+	}
+	return label
+}
+
+// gitWorktreeRoot is the git worktree w belongs to: its own path, or two
+// levels up (past workspaces/) for a nested Liferay Workspace.
+func gitWorktreeRoot(w Worktree) string {
+	if w.Workspace {
+		return filepath.Dir(filepath.Dir(w.Path))
+	}
+	return w.Path
 }
 
 func (m model) viewPanel() string {

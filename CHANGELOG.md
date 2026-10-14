@@ -20,6 +20,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   result files, for example because `--tests` matched nothing, a warning is
   printed instead; the exit code is unchanged in that case.
 
+### Changed — `dashboard`
+
+- Shows one tab per Liferay project instead of one per git worktree: a
+  worktree root that is a Liferay project, plus each Liferay Workspace under
+  its `workspaces/` directory that the CLI has run in or that the dashboard
+  was launched from. Workspace tabs are labeled `<branch> · <workspace>` and
+  carry their own slot, server, and database status. liferay-portal-ee's
+  sparse master-private checkout, which is not a Liferay project, no longer
+  gets a tab of its own; previously that tab reported the stock sibling
+  bundle's status under the worktree's branch.
+- Can be launched from any directory of the repository, including a sparse
+  checkout outside every Liferay project.
+- `ctrl+d` on a workspace tab explains how to remove its worktree instead of
+  deleting it, so removing a workspace never wipes the worktree around it.
+
+### Fixed — `worktree remove` / `worktree prune`
+
+- `worktree remove` now stops the Tomcat and database of every Liferay
+  Workspace nested in the worktree and deletes their CLI state. Previously a
+  workspace's server kept running from the deleted directory.
+- A Liferay Workspace's Tomcat is now recognized when stopping it.
+  Previously the process check expected the monorepo's `.bundles/` directory,
+  so a workspace Tomcat (running from `bundles/`) was left running with a
+  "possible PID reuse" warning.
+
 ## [v1.5.0] - 2026-09-22
 
 ### Added — `dashboard`
