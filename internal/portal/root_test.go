@@ -328,3 +328,35 @@ func TestFindTomcatDir_WorkspacePlainTomcatDir(t *testing.T) {
 		t.Errorf("FindTomcatDir = %q, want %q", got, tomcatDir)
 	}
 }
+
+func TestNestedWorkspaces(t *testing.T) {
+	root := t.TempDir()
+	content := []byte(`apply plugin: "com.liferay.workspace"` + "\n")
+	for _, name := range []string{"liferay-b-workspace", "liferay-a-workspace"} {
+		dir := filepath.Join(root, "workspaces", name)
+		if err := os.MkdirAll(dir, 0755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(dir, "settings.gradle"), content, 0644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.MkdirAll(filepath.Join(root, "workspaces", "not-a-workspace"), 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	got := NestedWorkspaces(root)
+	want := []string{
+		filepath.Join(root, "workspaces", "liferay-a-workspace"),
+		filepath.Join(root, "workspaces", "liferay-b-workspace"),
+	}
+	if strings.Join(got, ",") != strings.Join(want, ",") {
+		t.Errorf("NestedWorkspaces = %v, want %v", got, want)
+	}
+}
+
+func TestNestedWorkspaces_NoWorkspacesDir(t *testing.T) {
+	if got := NestedWorkspaces(t.TempDir()); len(got) != 0 {
+		t.Errorf("NestedWorkspaces = %v, want none", got)
+	}
+}

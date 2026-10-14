@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/david-truong/liferay-portal-cli/internal/state"
 )
 
 // TestRemoveWorktree_RefusesUnregisteredPath is the regression test for
@@ -84,6 +86,68 @@ func TestRemoveWorktree_RemovesRegisteredLinkedWorktree(t *testing.T) {
 	}
 }
 
+// TestRemoveWorktree_RemovesNestedWorkspaceState confirms removeWorktree
+// cleans up the CLI state of a Liferay Workspace nested in the worktree, not
+// just the worktree root's own.
+func TestRemoveWorktree_RemovesNestedWorkspaceState(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git not on PATH")
+	}
+	t.Setenv("HOME", t.TempDir())
+
+	repoDir := t.TempDir()
+	runGit(t, repoDir, "init")
+	runGit(t, repoDir, "config", "user.email", "test@example.com")
+	runGit(t, repoDir, "config", "user.name", "Test")
+	if err := os.WriteFile(filepath.Join(repoDir, "README.md"), []byte("hello\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	runGit(t, repoDir, "add", "README.md")
+	runGit(t, repoDir, "commit", "-m", "initial")
+
+	worktreePath := filepath.Join(t.TempDir(), "linked-worktree")
+	runGit(t, repoDir, "worktree", "add", worktreePath, "-b", "tmp-branch")
+
+	workspaceStateDir := state.Dir(writeTestWorkspace(t, worktreePath, "liferay-test-workspace"))
+	if err := os.MkdirAll(workspaceStateDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	origWD, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chdir(repoDir); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		if err := os.Chdir(origWD); err != nil {
+			t.Fatal(err)
+		}
+	})
+
+	err = removeWorktree(worktreePath, true /* assumeYes */, strings.NewReader(""), &bytes.Buffer{}, false)
+
+	if err != nil {
+		t.Fatalf("removeWorktree returned an error: %v", err)
+	}
+	if _, statErr := os.Stat(workspaceStateDir); !os.IsNotExist(statErr) {
+		t.Errorf("nested workspace state directory should have been removed, stat err: %v", statErr)
+	}
+}
+
+func TestTomcatGuardDir(t *testing.T) {
+	workspace := writeTestWorkspace(t, t.TempDir(), "liferay-test-workspace")
+	if got, want := tomcatGuardDir(workspace), filepath.Join(workspace, "bundles"); got != want {
+		t.Errorf("tomcatGuardDir(workspace) = %q, want %q", got, want)
+	}
+
+	deleted := filepath.Join(t.TempDir(), "LPD-1")
+	if got, want := tomcatGuardDir(deleted), deleted+string(filepath.Separator); got != want {
+		t.Errorf("tomcatGuardDir(deleted) = %q, want %q", got, want)
+	}
+}
+
 // TestStopFsmonitorDaemon_StopsRunningDaemon is the regression test for the
 // fsmonitor daemon leak: the built-in daemon has no idle timeout, so
 // removeWorktree must stop it before deleting the directory it watches, or
@@ -117,4 +181,21 @@ func runGit(t *testing.T, dir string, args ...string) {
 	if err != nil {
 		t.Fatalf("git %s: %v\n%s", strings.Join(args, " "), err, out)
 	}
+}
+
+func writeTestFile(t *testing.T, path, content string) {
+	t.Helper()
+	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte(content), 0644); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func writeTestWorkspace(t *testing.T, root, name string) string {
+	t.Helper()
+	workspace := filepath.Join(root, "workspaces", name)
+	writeTestFile(t, filepath.Join(workspace, "settings.gradle"), `apply plugin: "com.liferay.workspace"`+"\n")
+	return workspace
 }

@@ -550,6 +550,57 @@ func TestDeletePrimaryBlocked(t *testing.T) {
 	}
 }
 
+func TestDeleteWorkspaceBlocked(t *testing.T) {
+	m := testModel()
+	m.cfg.Worktrees[1] = Worktree{
+		Path: filepath.FromSlash("/w/LPD-1/workspaces/liferay-aihub-workspace"), Branch: "LPD-1", Slot: 2, Workspace: true,
+	}
+	m.active = 1
+
+	next, _ := m.handleKey(tea.KeyMsg{Type: tea.KeyCtrlD})
+	m = next.(model)
+	if m.confirmDelete {
+		t.Fatal("ctrl+d armed deletion of a workspace tab")
+	}
+	if !strings.Contains(m.note[1], "liferay worktree remove "+filepath.FromSlash("/w/LPD-1")+" ") {
+		t.Fatalf("note does not name the worktree to remove: %q", m.note[1])
+	}
+}
+
+func TestDeleteWorkspaceInPrimaryBlocked(t *testing.T) {
+	m := testModel()
+	m.cfg.PrimaryRoot = filepath.FromSlash("/w/master")
+	m.cfg.Worktrees[1] = Worktree{
+		Path: filepath.FromSlash("/w/master/workspaces/liferay-aihub-workspace"), Branch: "master", Slot: 2, Workspace: true,
+	}
+	m.active = 1
+
+	next, _ := m.handleKey(tea.KeyMsg{Type: tea.KeyCtrlD})
+	m = next.(model)
+	if m.confirmDelete {
+		t.Fatal("ctrl+d armed deletion of a workspace in the primary worktree")
+	}
+	if m.note[1] != "cannot delete the primary worktree" {
+		t.Fatalf("note = %q, want the primary worktree explanation", m.note[1])
+	}
+}
+
+func TestTabLabel(t *testing.T) {
+	for _, tc := range []struct {
+		w    Worktree
+		want string
+	}{
+		{Worktree{Path: "/w/LPD-1", Branch: "LPD-1"}, "LPD-1"},
+		{Worktree{Path: "/w/detached"}, "detached"},
+		{Worktree{Path: "/w/LPD-1/workspaces/liferay-aihub-workspace", Branch: "LPD-1", Workspace: true}, "LPD-1 · liferay-aihub-workspace"},
+		{Worktree{Path: "/w/detached/workspaces/liferay-aihub-workspace", Workspace: true}, "detached · liferay-aihub-workspace"},
+	} {
+		if got := tabLabel(tc.w); got != tc.want {
+			t.Errorf("tabLabel(%+v) = %q, want %q", tc.w, got, tc.want)
+		}
+	}
+}
+
 func TestWrapTabsBreaksOnNarrowWidth(t *testing.T) {
 	tabs := []string{
 		tabStyle.Render("alpha"),

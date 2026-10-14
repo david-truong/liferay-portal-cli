@@ -572,11 +572,12 @@ func claimedSlots(selfStateDir string) map[int]bool {
 			continue
 		}
 		// Self-healing: a claim whose worktree was deleted out from under
-		// it (recorded path no longer exists) no longer holds its slot.
-		// Stat only — no git, no deletion — so allocation stays fast and
-		// side-effect-free. Legacy claims with no recorded path are kept
-		// (conservative) until "liferay worktree prune" clears them.
-		if s.WorktreePath != "" && !fsutil.Exists(s.WorktreePath) {
+		// it (recorded path is no longer a Liferay project) no longer holds
+		// its slot. Stat only — no git, no deletion — so allocation stays
+		// fast and side-effect-free. Legacy claims with no recorded path
+		// are kept (conservative) until "liferay worktree prune" clears
+		// them.
+		if s.WorktreePath != "" && !isLiveProject(s.WorktreePath) {
 			continue
 		}
 		claimed[s.Slot] = true

@@ -28,6 +28,11 @@ func TestLoadOrInitState_RaceFreshWorktrees(t *testing.T) {
 	slots := make([]int, n)
 	errs := make([]error, n)
 
+	worktreeRoots := make([]string, n)
+	for i := range worktreeRoots {
+		worktreeRoots[i] = livePortal(t)
+	}
+
 	for i := 0; i < n; i++ {
 		wg.Add(1)
 		go func(i int) {
@@ -37,7 +42,7 @@ func TestLoadOrInitState_RaceFreshWorktrees(t *testing.T) {
 				errs[i] = fmt.Errorf("mkdir: %w", err)
 				return
 			}
-			s, err := loadOrInitState(stateDir, "mysql", stateDir, true)
+			s, err := loadOrInitState(stateDir, "mysql", worktreeRoots[i], true)
 			if err != nil {
 				errs[i] = err
 				return

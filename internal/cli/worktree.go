@@ -465,12 +465,16 @@ func removeWorktree(absTarget string, assumeYes bool, in io.Reader, out io.Write
 			"%s is not a linked worktree of this repository (see \"git worktree list\") — refusing to delete", absTarget)
 	}
 
-	stateDir := state.Dir(absTarget)
+	// A Liferay Workspace nested in the worktree runs its own slot, so it is
+	// stopped and cleaned up along with the worktree root.
+	projects := append([]string{absTarget}, portal.NestedWorkspaces(absTarget)...)
 
-	// Stop the slot's Docker stack and Tomcat before deleting anything, so
+	// Stop each slot's Docker stack and Tomcat before deleting anything, so
 	// the removal doesn't leak running containers or a Tomcat process.
-	dockerState, hasSlot := docker.LoadState(absTarget)
-	stopSlotRuntime(stateDir, absTarget, dockerState.Slot, hasSlot)
+	for _, project := range projects {
+		dockerState, hasSlot := docker.LoadState(project)
+		stopSlotRuntime(state.Dir(project), project, dockerState.Slot, hasSlot)
+	}
 
 	// The built-in fsmonitor daemon has no idle timeout — it only exits via
 	// an explicit "stop" — so deleting the directory out from under it would
@@ -489,7 +493,9 @@ func removeWorktree(absTarget string, assumeYes bool, in io.Reader, out io.Write
 		return err
 	}
 
-	removeDir(stateDir)
+	for _, project := range projects {
+		removeDir(state.Dir(project))
+	}
 	return nil
 }
 
@@ -557,13 +563,12 @@ func runWorktreePrune(_ *cobra.Command, _ []string) error {
 // state directory is removed. Shared by "prune" (worktree already gone) and
 // "remove" (worktree still present). Tomcat is stopped by PID rather than
 // catalina.sh so it works even when the bundle has been deleted; the PID
-// must reference bundleDir, guarding against killing an unrelated process.
-// hasSlot is false for state dirs that never ran a database.
+// must reference tomcatGuardDir, guarding against killing an unrelated
+// process. hasSlot is false for state dirs that never ran a database.
 func stopSlotRuntime(stateDirRoot, worktreePath string, slot int, hasSlot bool) {
 	if worktreePath != "" {
-		bundleDir := filepath.Join(worktreePath, bundleSubdirName)
 		pidFile := filepath.Join(stateDirRoot, "tomcat.pid")
-		if stopped, err := tomcat.ForceStop(pidFile, bundleDir); err != nil {
+		if stopped, err := tomcat.ForceStop(pidFile, tomcatGuardDir(worktreePath)); err != nil {
 			fmt.Printf("  warning: %v\n", err)
 		} else if stopped {
 			fmt.Println("  stopped Tomcat process")
@@ -574,6 +579,21 @@ func stopSlotRuntime(stateDirRoot, worktreePath string, slot int, hasSlot bool) 
 			fmt.Printf("  warning: could not stop Docker stack: %v\n", err)
 		}
 	}
+}
+
+// tomcatGuardDir returns the path a project's Tomcat command line must
+// reference: its bundle directory while the project exists — a Liferay
+// Workspace keeps it in bundles/, not .bundles/ — or, once the project is
+// deleted and its bundle location can no longer be read, the project
+// directory itself. The trailing separator keeps a sibling such as
+// LPD-1-bundle from matching LPD-1.
+func tomcatGuardDir(projectPath string) string {
+	if portal.DetectProjectType(projectPath) != portal.ProjectTypeUnknown {
+		if bundleDir, err := portal.BundleDir(projectPath); err == nil {
+			return bundleDir
+		}
+	}
+	return projectPath + string(filepath.Separator)
 }
 
 // stopFsmonitorDaemon stops the fsmonitor daemon watching dir, if one is

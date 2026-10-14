@@ -17,7 +17,10 @@ type Worktree struct {
 	Slot    int    // -1 when the worktree never claimed a slot (stock ports apply)
 	Engine  string // "" until `liferay db start` has run there
 	Primary bool
-	Ticket  string // Jira key parsed from the branch name, "" when none
+	// Workspace marks a Liferay Workspace nested in the git worktree (under
+	// workspaces/) rather than the worktree root itself.
+	Workspace bool
+	Ticket    string // Jira key parsed from the branch name, "" when none
 	// Flags are the feature flags this branch declares on top of master;
 	// the dashboard enables them in portal-ext.properties before boots.
 	Flags []string
@@ -32,6 +35,11 @@ type Config struct {
 	// Active is the tab selected at startup — the worktree the dashboard
 	// was launched from.
 	Active int
+	// PrimaryRoot is the repository's primary git worktree, the directory
+	// worktree removal runs from. It need not have a tab of its own:
+	// liferay-portal-ee's sparse master-private checkout is not a Liferay
+	// project.
+	PrimaryRoot string
 	// SelfExe is the liferay binary to shell out to for server actions.
 	SelfExe string
 	// Reload re-discovers worktree metadata (slot, engine, hostname, flags)
