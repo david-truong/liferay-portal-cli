@@ -2,9 +2,11 @@ package cli
 
 import (
 	"fmt"
+	"os"
 	"os/exec"
 	"path/filepath"
 
+	"github.com/david-truong/liferay-portal-cli/internal/docker"
 	"github.com/david-truong/liferay-portal-cli/internal/logrun"
 	"github.com/spf13/cobra"
 )
@@ -47,5 +49,24 @@ func runPlaywright(cmd *cobra.Command, args []string) error {
 
 	execCmd := exec.Command(npxPath, "playwright", "test", "--grep", playwrightTests)
 	execCmd.Dir = playwrightDir
+	if portalURL := playwrightPortalURL(portalRoot); portalURL != "" {
+		execCmd.Env = append(os.Environ(), "PORTAL_URL="+portalURL)
+	}
 	return logrun.Run(execCmd, logrun.Options{Label: "playwright", Verbose: verbose, WorktreeRoot: portalRoot})
+}
+
+// playwrightPortalURL returns the PORTAL_URL to hand Playwright so it targets
+// this worktree's Tomcat instead of the slot 0 default. It returns "" when the
+// caller already set PORTAL_URL or the worktree has no stored slot yet.
+func playwrightPortalURL(worktreeRoot string) string {
+	if _, ok := os.LookupEnv("PORTAL_URL"); ok {
+		return ""
+	}
+
+	st, ok := docker.LoadState(worktreeRoot)
+	if !ok {
+		return ""
+	}
+
+	return fmt.Sprintf("http://localhost:%d", docker.PortsFromSlot(st.Slot).TomcatHTTP)
 }
