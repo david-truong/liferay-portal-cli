@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed — `dashboard`
+
+- `ctrl+d` deletes liferay-portal-ee's sparse master-private worktrees again.
+  Their root is no Liferay project and has no tab, so their nested workspace
+  tab was the only one shown, and it refused deletion. A workspace tab now
+  removes its worktree when the root has no tab of its own, and the
+  confirmation names the worktree root.
+
 ## [v1.6.0] - 2026-10-14
 
 ### Added — `worktree add`

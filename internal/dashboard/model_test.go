@@ -551,6 +551,29 @@ func TestDeletePrimaryBlocked(t *testing.T) {
 }
 
 func TestDeleteWorkspaceBlocked(t *testing.T) {
+	m := newModel(Config{
+		Worktrees: []Worktree{
+			{Path: "/w/master", Branch: "master", Slot: 0, Primary: true},
+			{Path: filepath.FromSlash("/w/LPD-1"), Branch: "LPD-1", Slot: 1},
+			{Path: filepath.FromSlash("/w/LPD-1/workspaces/liferay-aihub-workspace"), Branch: "LPD-1", Slot: 2, Workspace: true},
+		},
+		SelfExe: "/bin/true",
+	})
+	m.active = 2
+
+	next, _ := m.handleKey(tea.KeyMsg{Type: tea.KeyCtrlD})
+	m = next.(model)
+	if m.confirmDelete {
+		t.Fatal("ctrl+d armed deletion of a workspace tab")
+	}
+	if !strings.Contains(m.note[2], "liferay worktree remove "+filepath.FromSlash("/w/LPD-1")+" ") {
+		t.Fatalf("note does not name the worktree to remove: %q", m.note[2])
+	}
+}
+
+// liferay-portal-ee's sparse master-private worktrees are not Liferay
+// projects, so their nested workspace is the only tab that can delete them.
+func TestDeleteWorkspaceWithoutRootTab(t *testing.T) {
 	m := testModel()
 	m.cfg.Worktrees[1] = Worktree{
 		Path: filepath.FromSlash("/w/LPD-1/workspaces/liferay-aihub-workspace"), Branch: "LPD-1", Slot: 2, Workspace: true,
@@ -559,11 +582,11 @@ func TestDeleteWorkspaceBlocked(t *testing.T) {
 
 	next, _ := m.handleKey(tea.KeyMsg{Type: tea.KeyCtrlD})
 	m = next.(model)
-	if m.confirmDelete {
-		t.Fatal("ctrl+d armed deletion of a workspace tab")
+	if !m.confirmDelete {
+		t.Fatalf("ctrl+d did not arm deletion of the worktree, note = %q", m.note[1])
 	}
-	if !strings.Contains(m.note[1], "liferay worktree remove "+filepath.FromSlash("/w/LPD-1")+" ") {
-		t.Fatalf("note does not name the worktree to remove: %q", m.note[1])
+	if footer := m.viewFooter(); !strings.Contains(footer, filepath.FromSlash("/w/LPD-1")+" ") {
+		t.Fatalf("confirmation does not name the worktree root: %q", footer)
 	}
 }
 

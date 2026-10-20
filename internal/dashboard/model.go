@@ -456,7 +456,7 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.note[m.active] = "cannot delete the primary worktree"
 			return m, nil
 		}
-		if w.Workspace {
+		if w.Workspace && m.hasRootTab(w) {
 			m.note[m.active] = "cannot delete a workspace; run liferay worktree remove " +
 				gitWorktreeRoot(w) + " to delete its worktree"
 			return m, nil
@@ -585,7 +585,21 @@ func (m model) startDelete() (tea.Model, tea.Cmd) {
 	w := m.cfg.Worktrees[index]
 	m.action[index] = "delete"
 	m.note[index] = ""
-	return m, deleteCmd(m.cfg.SelfExe, m.cfg.PrimaryRoot, w.Path, index, tabLabel(w))
+	return m, deleteCmd(m.cfg.SelfExe, m.cfg.PrimaryRoot, gitWorktreeRoot(w), index, tabLabel(w))
+}
+
+// hasRootTab reports whether workspace tab w's git worktree root has a tab of
+// its own. It does not when the root is no Liferay project, as with
+// liferay-portal-ee's sparse master-private worktrees, so deleting the
+// workspace tab is then the only way to delete the worktree.
+func (m model) hasRootTab(w Worktree) bool {
+	root := gitWorktreeRoot(w)
+	for _, other := range m.cfg.Worktrees {
+		if !other.Workspace && other.Path == root {
+			return true
+		}
+	}
+	return false
 }
 
 // removeTab drops tab i from every per-tab slice in lockstep so they stay
@@ -896,9 +910,14 @@ func (m model) viewFooter() string {
 		return m.cmdInput.View()
 	}
 	if m.confirmDelete {
+		w := m.cfg.Worktrees[m.active]
+		label := tabLabel(w)
+		if w.Workspace {
+			label = gitWorktreeRoot(w)
+		}
 		return softWrap(noteStyle.Render(fmt.Sprintf(
 			"Delete worktree %s and its bundle? This cannot be undone.  (ctrl+d again to confirm, any other key cancels)",
-			tabLabel(m.cfg.Worktrees[m.active]))), m.width)
+			label)), m.width)
 	}
 	return softWrap(dimStyle.Render(
 		"←/→ tabs · o open · ctrl+o adminer · s start · ctrl+s stop · r restart · ctrl+r reset · ctrl+d delete · : run · l logs · c clear · u refresh · q quit"),
