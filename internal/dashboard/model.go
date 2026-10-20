@@ -841,7 +841,7 @@ var (
 			Foreground(lipgloss.Color("15")).
 			Background(lipgloss.Color("57"))
 
-	labelStyle = lipgloss.NewStyle().Bold(true).Width(8)
+	labelStyle = lipgloss.NewStyle().Bold(true).Width(11)
 
 	readyDot    = lipgloss.NewStyle().Foreground(lipgloss.Color("42")).Render("●")
 	startingDot = lipgloss.NewStyle().Foreground(lipgloss.Color("214")).Render("●")
@@ -942,9 +942,21 @@ func (m model) drawerTitle() string {
 }
 
 func (m model) viewTabs() string {
+	rootTabs := make(map[string]int)
+	for _, w := range m.cfg.Worktrees {
+		rootTabs[gitWorktreeRoot(w)]++
+	}
+
 	tabs := make([]string, len(m.cfg.Worktrees))
 	for i, w := range m.cfg.Worktrees {
 		label := statusDot(m.statuses[i]) + " " + tabLabel(w)
+
+		// The info panel names the workspace, but tabs from the same git
+		// worktree would otherwise share a label.
+		if w.Workspace && rootTabs[gitWorktreeRoot(w)] > 1 {
+			label += " · " + filepath.Base(w.Path)
+		}
+
 		if i == m.active {
 			tabs[i] = activeTabStyle.Render(label)
 		} else {
@@ -996,9 +1008,6 @@ func tabLabel(w Worktree) string {
 	if label == "" {
 		label = filepath.Base(gitWorktreeRoot(w))
 	}
-	if w.Workspace {
-		label += " · " + filepath.Base(w.Path)
-	}
 	return label
 }
 
@@ -1031,6 +1040,9 @@ func (m model) viewPanel() string {
 	}
 	line("Slot", slot)
 	line("Path", state.DisplayHome(w.Path))
+	if w.Workspace {
+		line("Workspace", filepath.Base(w.Path))
+	}
 
 	tomcatValue := statusDot(st) + " " + statusWord(st)
 	if st.PID > 0 && st.Tomcat != TomcatStopped {
@@ -1117,7 +1129,7 @@ func (m model) viewJira(w Worktree) string {
 		return label + w.Ticket + " " + noteStyle.Render(result.err.Error()) + "\n"
 	}
 
-	pad := strings.Repeat(" ", 8)
+	pad := strings.Repeat(" ", lipgloss.Width(label))
 
 	var b strings.Builder
 	for i, l := range strings.Split(result.view, "\n") {
