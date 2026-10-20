@@ -592,12 +592,46 @@ func TestTabLabel(t *testing.T) {
 	}{
 		{Worktree{Path: "/w/LPD-1", Branch: "LPD-1"}, "LPD-1"},
 		{Worktree{Path: "/w/detached"}, "detached"},
-		{Worktree{Path: "/w/LPD-1/workspaces/liferay-aihub-workspace", Branch: "LPD-1", Workspace: true}, "LPD-1 · liferay-aihub-workspace"},
-		{Worktree{Path: "/w/detached/workspaces/liferay-aihub-workspace", Workspace: true}, "detached · liferay-aihub-workspace"},
+		{Worktree{Path: "/w/LPD-1/workspaces/liferay-aihub-workspace", Branch: "LPD-1", Workspace: true}, "LPD-1"},
+		{Worktree{Path: "/w/detached/workspaces/liferay-aihub-workspace", Workspace: true}, "detached"},
 	} {
 		if got := tabLabel(tc.w); got != tc.want {
 			t.Errorf("tabLabel(%+v) = %q, want %q", tc.w, got, tc.want)
 		}
+	}
+}
+
+func TestViewTabsNamesWorkspaceSharingWorktree(t *testing.T) {
+	m := testModel()
+	m.cfg.Worktrees[1].Path = filepath.FromSlash("/w/LPD-1")
+	m.cfg.Worktrees = append(m.cfg.Worktrees,
+		Worktree{Path: filepath.FromSlash("/w/LPD-1/workspaces/liferay-aihub-workspace"), Branch: "LPD-1", Workspace: true},
+		Worktree{Path: filepath.FromSlash("/w/LPD-2/workspaces/liferay-aihub-workspace"), Branch: "LPD-2", Workspace: true})
+	m.statuses = make([]Status, len(m.cfg.Worktrees))
+
+	tabs := m.viewTabs()
+	if !strings.Contains(tabs, "LPD-1 · liferay-aihub-workspace") {
+		t.Errorf("workspace sharing LPD-1 with its worktree is not named: %q", tabs)
+	}
+	if strings.Contains(tabs, "LPD-2 · ") {
+		t.Errorf("workspace alone in LPD-2 is named in its tab: %q", tabs)
+	}
+}
+
+func TestViewPanelWorkspace(t *testing.T) {
+	m := testModel()
+	m.cfg.Worktrees[1] = Worktree{
+		Path: filepath.FromSlash("/w/LPD-1/workspaces/liferay-aihub-workspace"), Branch: "LPD-1", Slot: 2, Workspace: true,
+	}
+
+	m.active = 0
+	if panel := m.viewPanel(); strings.Contains(panel, "Workspace") {
+		t.Errorf("monorepo panel shows a workspace: %q", panel)
+	}
+
+	m.active = 1
+	if panel := m.viewPanel(); !strings.Contains(panel, "Workspace  liferay-aihub-workspace") {
+		t.Errorf("workspace panel does not name the workspace: %q", panel)
 	}
 }
 
