@@ -1,3 +1,5 @@
+//go:build !windows
+
 package tomcat
 
 import (
@@ -5,7 +7,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"runtime"
 	"strconv"
 	"syscall"
 	"testing"
@@ -15,9 +16,6 @@ import (
 // Status refuses to trust it (PID-reuse guard) and reports not-running,
 // same as a stale pid file.
 func TestStatus_PidReuseGuard(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("no ps on windows")
-	}
 	cmd, pidFile := spawnSleep(t)
 
 	paths := Paths{Bundle: "/bundle/that/does/not/appear/in/cmdline", PidFile: pidFile}
@@ -36,10 +34,6 @@ func TestStatus_PidReuseGuard(t *testing.T) {
 // Status finds it via orphanPID, adopts it into the pidfile, and reports
 // running.
 func TestStatus_AdoptsOrphanedProcess(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("no ps on windows")
-	}
-
 	tomcatDir := t.TempDir()
 
 	// A real Tomcat's -Dcatalina.base flag is a distinct argv token, not
@@ -82,10 +76,6 @@ func TestStatus_AdoptsOrphanedProcess(t *testing.T) {
 // When no tracked pid and no matching orphan exist, Status reports not
 // running without adopting anything.
 func TestStatus_NoOrphanFound(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("no ps on windows")
-	}
-
 	pidFile := filepath.Join(t.TempDir(), "tomcat.pid")
 	paths := Paths{Bundle: "/bundle", Tomcat: "/bundle/tomcat-1.2.3", PidFile: pidFile}
 	pid, alive := Status(paths)
@@ -100,9 +90,6 @@ func TestStatus_NoOrphanFound(t *testing.T) {
 // When the live PID's command line does reference the bundle dir, Status
 // reports running.
 func TestStatus_MatchingCommandLine(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("no ps on windows")
-	}
 	// Spawn a process whose argv contains the bundle path without a shell
 	// in between: sh may exec its single command in place, dropping a
 	// trailing "# <path>" comment from the ps output. tail's argument
