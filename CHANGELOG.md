@@ -7,13 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [v1.6.1] - 2026-10-20
+
+### Changed — `dashboard`
+
+- A workspace tab is labeled with its branch alone, adding `· <workspace>`
+  only when another tab shares its worktree, and the info panel names the
+  tab's Liferay Workspace on a `Workspace` line.
+
 ### Fixed — `dashboard`
 
-- `ctrl+d` deletes liferay-portal-ee's sparse master-private worktrees again.
+- `ctrl+d` deletes liferay-portal-ee's sparse master-private worktrees.
   Their root is no Liferay project and has no tab, so their nested workspace
   tab was the only one shown, and it refused deletion. A workspace tab now
   removes its worktree when the root has no tab of its own, and the
   confirmation names the worktree root.
+
+### Fixed — `playwright`
+
+- `playwright` points Playwright at the worktree's own Tomcat by setting
+  `PORTAL_URL` from the worktree's slot, instead of the slot 0 default. A
+  `PORTAL_URL` already set in the environment is left alone.
 
 ### Fixed — `server`
 
