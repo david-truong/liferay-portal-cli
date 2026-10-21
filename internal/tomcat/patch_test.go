@@ -370,3 +370,39 @@ func TestPatchGlowrootAdmin_CorruptJSON(t *testing.T) {
 		t.Error("expected error for corrupt JSON, got nil")
 	}
 }
+
+// TestWriteElasticsearchConfig_ES7MatchesPortalWriteBack pins the ES7 file to
+// the exact bytes the portal writes back after applying the portal-ext
+// productionModeEnabled override. Any difference makes Config Admin deliver
+// an update mid-boot, and the ES7 SidecarManager then races two sidecars on
+// the same data directory ("failed to obtain node locks").
+func TestWriteElasticsearchConfig_ES7MatchesPortalWriteBack(t *testing.T) {
+	bundle := t.TempDir()
+
+	if err := writeElasticsearchConfig(bundle, docker.PortsFromSlot(11)); err != nil {
+		t.Fatalf("writeElasticsearchConfig: %v", err)
+	}
+
+	configs := filepath.Join(bundle, "osgi", "configs")
+
+	es7, err := os.ReadFile(filepath.Join(configs, "com.liferay.portal.search.elasticsearch7.configuration.ElasticsearchConfiguration.config"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantES7 := "sidecarHttpPort=\"10311\"\n" +
+		"transportTcpPort=\"10411\"\n" +
+		"networkBindHost=\"127.0.0.1\"\n" +
+		"networkPublishHost=\"127.0.0.1\"\n" +
+		"productionModeEnabled=B\"false\""
+	if string(es7) != wantES7 {
+		t.Errorf("ES7 config:\n got %q\nwant %q", es7, wantES7)
+	}
+
+	es8, err := os.ReadFile(filepath.Join(configs, "com.liferay.portal.search.elasticsearch8.configuration.ElasticsearchConfiguration.config"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(es8), "productionModeEnabled") {
+		t.Errorf("ES8 config should not set productionModeEnabled, got %q", es8)
+	}
+}

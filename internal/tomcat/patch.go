@@ -322,6 +322,12 @@ func patchGlowrootAdmin(bundleDir string, ports docker.Ports) error {
 // occasional IPv6 binding failures drewbrokke documented). Both the ES7 and
 // ES8 config files are written so the correct one is picked up regardless of
 // which Elasticsearch bundle is installed in the portal.
+//
+// The ES7 file also carries the portal-ext productionModeEnabled override, in
+// the exact form the portal writes back after applying it. Without it, every
+// start rewrites the file the portal changed, Config Admin delivers an update
+// mid-boot, and the ES7 SidecarManager races two sidecars on one data
+// directory ("failed to obtain node locks").
 func writeElasticsearchConfig(bundleDir string, ports docker.Ports) error {
 	content := fmt.Sprintf(
 		"sidecarHttpPort=\"%d\"\n"+
@@ -330,16 +336,16 @@ func writeElasticsearchConfig(bundleDir string, ports docker.Ports) error {
 			"networkPublishHost=\"127.0.0.1\"\n",
 		ports.ESHTTP, ports.ESTransport)
 
-	for _, pid := range []string{
-		"com.liferay.portal.search.elasticsearch7.configuration.ElasticsearchConfiguration",
-		"com.liferay.portal.search.elasticsearch8.configuration.ElasticsearchConfiguration",
-	} {
-		path := filepath.Join(bundleDir, "osgi", "configs", pid+".config")
-		if err := writeOSGiConfig(path, content); err != nil {
-			return err
-		}
+	configs := filepath.Join(bundleDir, "osgi", "configs")
+
+	if err := writeOSGiConfig(
+		filepath.Join(configs, "com.liferay.portal.search.elasticsearch7.configuration.ElasticsearchConfiguration.config"),
+		content+"productionModeEnabled=B\"false\""); err != nil {
+		return err
 	}
-	return nil
+	return writeOSGiConfig(
+		filepath.Join(configs, "com.liferay.portal.search.elasticsearch8.configuration.ElasticsearchConfiguration.config"),
+		content)
 }
 
 // writeArquillianConfig sets the Arquillian junit-bridge connector port so
